@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#090d20" />
+    <meta name="description" content="Nyx local game launcher icon preview" />
+    <title>Nyx — Game Launcher Icon</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #080b18;
+        color: #f4f7ff;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-width: 320px;
+        min-height: 100vh;
+        min-height: 100svh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background:
+          radial-gradient(ellipse at 50% 42%, rgba(24, 39, 92, .52), transparent 42rem),
+          radial-gradient(ellipse at 18% 18%, rgba(34, 211, 238, .1), transparent 28rem),
+          radial-gradient(ellipse at 82% 86%, rgba(99, 102, 241, .13), transparent 30rem),
+          #080b18;
+      }
+
+      main {
+        width: min(100% - 40px, 620px);
+        display: grid;
+        justify-items: center;
+        gap: 30px;
+        padding: 48px 24px;
+        text-align: center;
+      }
+
+      .icon-wrap {
+        position: relative;
+        width: min(72vw, 360px);
+        aspect-ratio: 1;
+        isolation: isolate;
+        animation: hover 6s ease-in-out infinite;
+      }
+
+      .icon-wrap::before {
+        position: absolute;
+        z-index: -1;
+        inset: 14%;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #22d3ee, #4f46e5);
+        content: "";
+        filter: blur(62px);
+        opacity: .2;
+        animation: glow 5s ease-in-out infinite alternate;
+      }
+
+      .icon-wrap img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        filter: drop-shadow(0 28px 55px rgba(0, 0, 0, .52));
+      }
+
+      .wordmark {
+        margin: 0;
+        font-size: clamp(2rem, 8vw, 3.5rem);
+        font-weight: 750;
+        letter-spacing: .16em;
+        line-height: 1;
+        text-indent: .16em;
+      }
+
+      .descriptor {
+        margin: 12px 0 0;
+        color: #9ca9c8;
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .28em;
+        text-indent: .28em;
+      }
+
+      .library {
+        margin: 24px 0 0;
+        color: #63708e;
+        font-size: .78rem;
+        letter-spacing: .08em;
+      }
+
+      @keyframes hover {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+      }
+
+      @keyframes glow {
+        from { opacity: .14; transform: scale(.92); }
+        to { opacity: .3; transform: scale(1.08); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: .01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main aria-label="Nyx game launcher icon preview">
+      <div class="icon-wrap">
+        <img
+          src="Nyx icon.png"
+          width="1254"
+          height="1254"
+          alt="A cyan-to-indigo crescent moon holding a four-way gamepad D-pad on a dark navy tile"
+        />
+      </div>
+      <section>
+        <h1 class="wordmark">NYX</h1>
+        <p class="descriptor">LOCAL GAME LAUNCHER</p>
+        <p class="library">Your games. Your library.</p>
+      </section>
+    </main>
+  </body>
+</html>

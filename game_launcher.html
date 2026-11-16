@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nyx // Game Launcher</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <!-- Tone.js for procedural UI sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        glass: 'rgba(18, 20, 28, 0.65)',
+                        glassLight: 'rgba(255, 255, 255, 0.08)',
+                        glassBorder: 'rgba(255, 255, 255, 0.12)',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-6px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar Hiding & Core Layout */
+        body {
+            background-color: #090a0f;
+            color: #f8fafc;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 3D Perspective Container for Carousel */
+        .carousel-stage {
+            perspective: 1400px;
+            transform-style: preserve-3d;
+        }
+
+        .carousel-card {
+            position: absolute;
+            transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), 
+                        opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+                        filter 0.55s ease,
+                        box-shadow 0.55s ease;
+            will-change: transform, opacity;
+            transform-origin: center center;
+            cursor: pointer;
+        }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(15, 17, 25, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-pill {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.25s ease;
+        }
+
+        .glass-pill:hover {
+            background: rgba(255, 255, 255, 0.14);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        /* Dynamic Ambient Backdrop Transitions */
+        .backdrop-layer {
+            position: fixed;
+            inset: -5%;
+            width: 110%;
+            height: 110%;
+            transition: opacity 0.9s ease-in-out, transform 1.2s ease-out;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Subtle Noise Texture Overlay */
+        .noise-overlay {
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.035'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Custom Scrollbar for Modals/Drawers */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 9999px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Active Card Glow Ring */
+        .active-card-ring {
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 35px -5px var(--accent-glow, rgba(56, 189, 248, 0.45));
+        }
+
+        /* Animated Shine on Play Button */
+        @keyframes shine {
+            0% { left: -100%; }
+            20% { left: 100%; }
+            100% { left: 100%; }
+        }
+        .btn-shine::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.35), transparent);
+            transform: skewX(-25deg);
+            animation: shine 4s infinite;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between relative antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- Dynamic Crossfading Ambient Backgrounds -->
+    <div id="bg-layer-a" class="backdrop-layer opacity-100"></div>
+    <div id="bg-layer-b" class="backdrop-layer opacity-0"></div>
+    
+    <!-- Vignette & Gradient Readability Scrim -->
+    <div class="fixed inset-0 bg-gradient-to-t from-[#07080c] via-[#07080c]/65 to-[#07080c]/40 pointer-events-none z-[1]"></div>
+    <div class="fixed inset-0 bg-gradient-to-r from-[#07080c]/85 via-transparent to-[#07080c]/75 pointer-events-none z-[1]"></div>
+    <div class="noise-overlay"></div>
+
+    <!-- =====================================================================
+         TOP NAVIGATION BAR
+    ====================================================================== -->
+    <header class="relative z-30 w-full px-4 sm:px-8 pt-4 pb-2 flex flex-wrap items-center justify-between gap-4">
+        <!-- Brand Logo & Filter Pills -->
+        <div class="flex items-center gap-6">
+            <!-- Launcher Brand -->
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="resetFilters()">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+                    <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div class="hidden sm:block">
+                    <span class="font-display font-extrabold text-xl tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Nyx</span>
+                </div>
+            </div>
+
+            <!-- Category Filter Tabs -->
+            <nav id="category-tabs" class="flex items-center gap-1.5 bg-white/[0.04] p-1 rounded-full border border-white/10 backdrop-blur-md overflow-x-auto max-w-[60vw] sm:max-w-none">
+                <button data-filter="all" class="filter-btn active px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all bg-white text-slate-950 shadow-sm">
+                    All Games
+                </button>
+                <button data-filter="installed" class="filter-btn px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium text-slate-300 hover:text-white transition-all">
+                    Installed
+                </button>
+                <button data-filter="favorites" class="filter-btn px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium text-slate-300 hover:text-white transition-all">
+                    Favorites
+                </button>
+                <button data-filter="recent" class="filter-btn px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium text-slate-300 hover:text-white transition-all">
+                    Recent
+                </button>
+            </nav>
+        </div>
+
+        <!-- Right Controls: Search, Downloads, Audio, Profile, Clock -->
+        <div class="flex items-center gap-2.5 sm:gap-3.5 ml-auto sm:ml-0">
+            <!-- Search Input -->
+            <div class="relative hidden md:flex items-center">
+                <svg class="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input id="search-input" type="text" placeholder="Search library..." 
+                    class="w-44 lg:w-56 pl-9 pr-4 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400/60 focus:bg-white/[0.1] transition-all">
+            </div>
+
+            <!-- Sound Effects Toggle -->
+            <button id="sound-toggle" title="Toggle UI Audio Feedback" class="glass-pill w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white">
+                <svg id="sound-icon-on" class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <svg id="sound-icon-off" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+            </button>
+
+            <!-- Download Manager Indicator -->
+            <button id="downloads-btn" class="glass-pill px-3 h-9 rounded-full flex items-center gap-2 text-xs font-medium text-slate-200 relative">
+                <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span id="download-status-text" class="hidden sm:inline">Idle</span>
+                <span id="download-badge" class="hidden w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+            </button>
+
+            <!-- Friends Drawer Toggle -->
+            <button id="friends-btn" class="glass-pill px-3 h-9 rounded-full flex items-center gap-2 text-xs font-medium text-slate-200">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span class="hidden sm:inline">4 Online</span>
+                <svg class="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            </button>
+
+            <!-- User Profile & System Clock -->
+            <div class="flex items-center gap-3 pl-2 border-l border-white/10">
+                <div class="text-right hidden lg:block">
+                    <div id="system-clock" class="text-xs font-semibold text-white tracking-wide">02:25 PM</div>
+                    <div class="text-[10px] text-emerald-400 font-medium">● Online • Lv. 64</div>
+                </div>
+                <div class="relative cursor-pointer group" onclick="showToast('Profile: VEX_PRIME // Status: Online')">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-fuchsia-600 to-cyan-400 p-[2px]">
+                        <div class="w-full h-full rounded-full bg-slate-900 flex items-center justify-center font-display font-bold text-xs text-white">
+                            VX
+                        </div>
+                    </div>
+                    <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-950"></span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- =====================================================================
+         MAIN STAGE: 3D HORIZONTAL CAROUSEL + ACTIVE HERO DETAILS
+    ====================================================================== -->
+    <main class="relative z-20 flex-1 flex flex-col justify-between overflow-hidden px-4 sm:px-8 pb-3">
+        
+        <!-- 3D Carousel Viewport -->
+        <div id="carousel-container" class="carousel-stage relative w-full h-[300px] sm:h-[340px] lg:h-[370px] flex items-center justify-center my-auto touch-pan-y">
+            <!-- Cards injected dynamically via JS -->
+            <div id="carousel-track" class="relative w-full h-full flex items-center justify-center"></div>
+
+            <!-- Left / Right Carousel Navigation Arrows -->
+            <button id="prev-btn" aria-label="Previous Game" class="glass-pill absolute left-1 sm:left-4 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-xl">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <button id="next-btn" aria-label="Next Game" class="glass-pill absolute right-1 sm:right-4 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-xl">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Active Game Hero Information & Action Bar -->
+        <section id="hero-details" class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-end pt-2 transition-all duration-300">
+            
+            <!-- Left Column: Title, Tags, Synopsis -->
+            <div class="lg:col-span-7 space-y-2.5">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span id="hero-developer" class="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">KINETIC STUDIOS</span>
+                    <span class="text-slate-600">•</span>
+                    <div id="hero-tags" class="flex flex-wrap gap-1.5">
+                        <!-- Genre tags injected dynamically -->
+                    </div>
+                    <button id="favorite-toggle-btn" title="Toggle Favorite" class="ml-1 p-1.5 rounded-full hover:bg-white/10 transition-colors text-slate-400 hover:text-rose-400">
+                        <svg id="favorite-heart-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                    </button>
+                </div>
+
+                <h1 id="hero-title" class="font-display font-black text-3xl sm:text-5xl lg:text-[3.4rem] leading-none tracking-tight text-white drop-shadow-md">
+                    NEON SOVEREIGN
+                </h1>
+
+                <p id="hero-synopsis" class="text-slate-300 text-xs sm:text-sm lg:text-base max-w-2xl line-clamp-2 leading-relaxed">
+                    Infiltrate the vertical megastructures of New Kowloon in 2099. Hack neural networks, customize cybernetic limbs, and dismantle corporate syndicates in a high-octane action RPG.
+                </p>
+
+                <!-- Primary Action Buttons Row -->
+                <div class="flex flex-wrap items-center gap-3 pt-2">
+                    <!-- Main PLAY / INSTALL / DOWNLOADING CTA -->
+                    <button id="primary-action-btn" class="btn-shine relative overflow-hidden px-7 sm:px-9 py-3.5 rounded-2xl font-display font-bold text-sm sm:text-base tracking-wider uppercase flex items-center gap-3 text-slate-950 bg-cyan-400 hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-cyan-500/30">
+                        <span id="primary-action-icon">
+                            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </span>
+                        <span id="primary-action-label">PLAY NOW</span>
+                    </button>
+
+                    <!-- Game Details Modal Trigger -->
+                    <button id="details-modal-btn" class="glass-pill px-5 py-3.5 rounded-2xl font-medium text-xs sm:text-sm text-white flex items-center gap-2 hover:bg-white/15 active:scale-[0.98]">
+                        <svg class="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Game Hub & Specs</span>
+                    </button>
+
+                    <!-- System / File Size Pill -->
+                    <div id="hero-size-badge" class="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-slate-400">
+                        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span id="hero-status-text">Ready • 84.2 GB</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Stats, Achievements & Friends Playing -->
+            <div class="lg:col-span-5 glass-panel rounded-2xl p-4 sm:p-5 grid grid-cols-3 gap-4 items-center">
+                <!-- Playtime & Rating -->
+                <div class="space-y-1 border-r border-white/10 pr-3">
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Playtime</div>
+                    <div id="hero-playtime" class="font-display font-bold text-lg sm:text-xl text-white">142.5 hrs</div>
+                    <div class="flex items-center gap-1 text-xs text-amber-400 font-medium">
+                        <span>★</span>
+                        <span id="hero-rating">4.9</span>
+                        <span class="text-slate-500 text-[10px]">(12k)</span>
+                    </div>
+                </div>
+
+                <!-- Achievements Progress -->
+                <div class="space-y-1.5 border-r border-white/10 pr-3">
+                    <div class="flex justify-between items-center text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                        <span>Trophies</span>
+                        <span id="hero-achievements-pct" class="text-white">78%</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div id="hero-achievements-bar" class="h-full rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500 transition-all duration-500" style="width: 78%"></div>
+                    </div>
+                    <div id="hero-achievements-count" class="text-[11px] text-slate-400">47 / 60 Unlocked</div>
+                </div>
+
+                <!-- Friends Currently Playing -->
+                <div class="space-y-1.5">
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Friends Active</div>
+                    <div id="hero-friends-avatars" class="flex items-center -space-x-2">
+                        <!-- Avatars populated by JS -->
+                    </div>
+                    <div id="hero-friends-label" class="text-[11px] text-emerald-400 truncate">3 playing now</div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- =====================================================================
+         BOTTOM QUICK-ACCESS DOCK
+    ====================================================================== -->
+    <footer class="relative z-30 w-full px-4 sm:px-8 pb-4 pt-1 flex items-center justify-between gap-4">
+        <!-- Quick Jump Thumbnails -->
+        <div class="flex items-center gap-2 overflow-x-auto py-1 max-w-full">
+            <span class="text-[11px] uppercase tracking-widest text-slate-500 font-semibold mr-2 hidden md:inline">Quick Jump</span>
+            <div id="quick-dock" class="flex items-center gap-2">
+                <!-- Quick jump pills injected dynamically -->
+            </div>
+        </div>
+
+        <!-- Keyboard / Input Hints -->
+        <div class="hidden xl:flex items-center gap-4 text-[11px] text-slate-400">
+            <span class="flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/15 text-slate-200 font-mono">←</kbd><kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/15 text-slate-200 font-mono">→</kbd> Navigate</span>
+            <span class="flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/15 text-slate-200 font-mono">ENTER</kbd> Launch</span>
+            <span class="flex items-center gap-1.5"><kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/15 text-slate-200 font-mono">SCROLL / DRAG</kbd> Spin</span>
+        </div>
+    </footer>
+
+    <!-- =====================================================================
+         MODAL: GAME DETAILS HUB (Specs, Patch Notes, Media)
+    ====================================================================== -->
+    <div id="game-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-md transition-opacity">
+        <div class="glass-panel w-full max-w-3xl rounded-3xl overflow-hidden border border-white/15 shadow-2xl transform transition-all max-h-[88vh] flex flex-col">
+            <!-- Modal Header Banner -->
+            <div id="modal-banner" class="relative h-44 sm:h-52 w-full p-6 flex flex-col justify-end overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-t from-[#0f1119] via-[#0f1119]/40 to-transparent z-10"></div>
+                <button id="close-modal-btn" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center border border-white/15 transition-colors">
+                    ✕
+                </button>
+                <div class="relative z-20">
+                    <span id="modal-genre-badge" class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">CYBERPUNK RPG</span>
+                    <h2 id="modal-title" class="font-display font-black text-2xl sm:text-4xl text-white mt-2">NEON SOVEREIGN</h2>
+                    <p id="modal-dev" class="text-xs text-slate-300">Developed by Kinetic Studios • Version 2.4.1 (Build 9940)</p>
+                </div>
+            </div>
+
+            <!-- Modal Body Scrollable -->
+            <div class="p-6 overflow-y-auto custom-scroll space-y-6 text-sm">
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Overview</h3>
+                    <p id="modal-full-desc" class="text-slate-200 leading-relaxed"></p>
+                </div>
+
+                <!-- Grid: System Specs & Latest Patch Notes -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+                            Recommended System Specs
+                        </h4>
+                        <ul id="modal-specs" class="space-y-1.5 text-xs text-slate-300">
+                            <!-- Specs populated via JS -->
+                        </ul>
+                    </div>
+
+                    <div class="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                            Latest Patch Notes
+                        </h4>
+                        <ul id="modal-patches" class="space-y-1.5 text-xs text-slate-300 list-disc list-inside">
+                            <!-- Patch notes populated via JS -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         SLIDE-OVER DRAWER: FRIENDS & DOWNLOADS
+    ====================================================================== -->
+    <div id="side-drawer" class="fixed inset-y-0 right-0 z-50 w-80 sm:w-96 glass-panel border-l border-white/15 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col">
+        <div class="p-5 border-b border-white/10 flex items-center justify-between">
+            <h3 id="drawer-title" class="font-display font-bold text-lg text-white">Social & Activity</h3>
+            <button id="close-drawer-btn" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300">✕</button>
+        </div>
+        <div id="drawer-content" class="p-5 overflow-y-auto custom-scroll flex-1 space-y-4">
+            <!-- Dynamic Drawer Content (Friends or Download Queue) -->
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         LAUNCHING SIMULATION OVERLAY & TOAST NOTIFICATION
+    ====================================================================== -->
+    <div id="launch-overlay" class="fixed inset-0 z-50 hidden flex-col items-center justify-center bg-black/90 backdrop-blur-xl transition-opacity">
+        <div id="launch-spinner" class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyan-400 to-indigo-600 animate-spin mb-6 shadow-2xl shadow-cyan-500/40"></div>
+        <div class="text-xs uppercase tracking-[0.3em] text-cyan-400 font-bold mb-2">INITIALIZING ENGINE</div>
+        <h2 id="launch-game-title" class="font-display font-black text-3xl sm:text-5xl text-white mb-4">NEON SOVEREIGN</h2>
+        <div class="w-64 h-1.5 bg-white/10 rounded-full overflow-hidden mb-6">
+            <div id="launch-progress-bar" class="h-full bg-cyan-400 transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <button id="cancel-launch-btn" class="px-5 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs text-slate-300 border border-white/15">
+            Abort Launch
+        </button>
+    </div>
+
+    <!-- Toast Notification Pill -->
+    <div id="toast-pill" class="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full glass-panel border border-cyan-400/30 text-xs font-medium text-white shadow-xl opacity-0 pointer-events-none transition-all duration-300">
+        Notification
+    </div>
+
+    <!-- =====================================================================
+         JAVASCRIPT LOGIC: DATA, 3D CAROUSEL ENGINE, AUDIO & INTERACTIVITY
+    ====================================================================== -->
+    <script>
+        /**
+         * Curated Library of Fictional Games with Custom Vector Art & Rich Metadata
+         */
+        const GAMES_DATA = [
+            {
+                id: 'neon-sovereign',
+                title: 'NEON SOVEREIGN',
+                developer: 'KINETIC STUDIOS',
+                genre: 'Cyberpunk RPG',
+                tags: ['Cyberpunk', 'Open World', 'Action RPG', 'Raytracing'],
+                rating: '4.9',
+                reviews: '18.4k',
+                playtime: '142.5 hrs',
+                installed: true,
+                favorite: true,
+                recent: true,
+                size: '84.2 GB',
+                achievements: { unlocked: 47, total: 60 },
+                accentColor: '#22d3ee', // Cyan
+                accentGlow: 'rgba(34, 211, 238, 0.5)',
+                bgGradient: 'radial-gradient(circle at 65% 30%, #0e7490 0%, #1e1b4b 45%, #07080c 90%)',
+                cardGradient: 'linear-gradient(145deg, #06b6d4 0%, #312e81 55%, #090a0f 100%)',
+                friendsPlaying: ['Kaelen', 'Nyx_99', 'Sora'],
+                synopsis: 'Infiltrate the vertical megastructures of New Kowloon in 2099. Hack neural networks, customize cybernetic limbs, and dismantle corporate syndicates in a high-octane action RPG.',
+                specs: ['OS: Windows 11 / NyxOS 4.0', 'CPU: Ryzen 7 7800X3D / Core i7-13700K', 'GPU: RTX 4070 Ti / RX 7900 XT', 'RAM: 32 GB DDR5', 'Storage: 85 GB NVMe SSD'],
+                patches: ['v2.4.1: Added Path Tracing Overdrive mode', 'v2.4.0: New Blackwall Cyberdeck & 6 Mantis mods', 'Fixed memory leak in Kabuki District market'],
+                svgIllustration: `
+                    <svg viewBox="0 0 300 400" class="w-full h-full object-cover">
+                        <defs>
+                            <linearGradient id="cyberSun" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#f43f5e"/>
+                                <stop offset="100%" stop-color="#22d3ee"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="150" cy="145" r="78" fill="url(#cyberSun)" opacity="0.85"/>
+                        <path d="M0 240 L60 190 L110 220 L165 160 L220 205 L300 170 L300 400 L0 400 Z" fill="#090d16" opacity="0.9"/>
+                        <rect x="45" y="130" width="38" height="270" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+                        <rect x="195" y="110" width="52" height="290" fill="#0f172a" stroke="#f43f5e" stroke-width="1.5"/>
+                        <line x1="55" y1="150" x2="55" y2="360" stroke="#22d3ee" stroke-width="2" stroke-dasharray="10 8"/>
+                        <line x1="215" y1="130" x2="215" y2="380" stroke="#f43f5e" stroke-width="2" stroke-dasharray="16 6"/>
+                        <circle cx="150" cy="145" r="95" fill="none" stroke="#22d3ee" stroke-width="0.8" stroke-dasharray="4 6"/>
+                    </svg>`
+            },
+            {
+                id: 'elden-spire',
+                title: 'ASHES OF VALDRIS',
+                developer: 'MYTHOS INTERACTIVE',
+                genre: 'Dark Fantasy Action',
+                tags: ['Souls-like', 'Dark Fantasy', 'Boss Rush', 'Co-op'],
+                rating: '4.8',
+                reviews: '31.2k',
+                playtime: '96.0 hrs',
+                installed: true,
+                favorite: true,
+                recent: true,
+                size: '68.5 GB',
+                achievements: { unlocked: 34, total: 42 },
+                accentColor: '#f59e0b', // Amber Gold
+                accentGlow: 'rgba(245, 158, 11, 0.5)',
+                bgGradient: 'radial-gradient(circle at 60% 25%, #92400e 0%, #451a03 45%, #07080c 90%)',
+                cardGradient: 'linear-gradient(145deg, #d97706 0%, #451a03 55%, #0c0a09 100%)',
+                friendsPlaying: ['Valkyrie', 'Draven'],
+                synopsis: 'Ascend the fractured Sun-Spire where fallen deities slumber. Master fluid stance-switching swordplay and forge celestial relics in a grim, atmospheric world.',
+                specs: ['OS: Windows 10/11 64-bit', 'CPU: Ryzen 5 5600X / Core i5-12600K', 'GPU: RTX 3070 / RX 6800', 'RAM: 16 GB DDR4', 'Storage: 70 GB SSD'],
+                patches: ['v1.12: Expansion "Shattered Crown" compatibility', 'Rebalanced Greatsword poise recovery frames', 'Improved cooperative summon latency'],
+                svgIllustration: `
+                    <svg viewBox="0 0 300 400" class="w-full h-full object-cover">
+                        <circle cx="150" cy="130" r="65" fill="none" stroke="#fbbf24" stroke-width="3" opacity="0.9"/>
+                        <circle cx="150" cy="130" r="85" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="6 6" opacity="0.6"/>
+                        <polygon points="150,55 162,180 150,330 138,180" fill="#fef3c7" opacity="0.9"/>
+                        <polygon points="115,175 185,175 178,185 122,185" fill="#f59e0b"/>
+                        <path d="M0 320 Q150 260 300 320 L300 400 L0 400 Z" fill="#1c1917"/>
+                    </svg>`
+            },
+            {
+                id: 'hyperion-drift',
+                title: 'HYPERION ZERO-G',
+                developer: 'VECTOR PULSE',
+                genre: 'Sci-Fi Anti-Grav Racer',
+                tags: ['Sci-Fi', 'Racing', '120 FPS', 'Multiplayer'],
+                rating: '4.7',
+                reviews: '9.1k',
+                playtime: '38.2 hrs',
+                installed: true,
+                favorite: false,
+                recent: true,
+                size: '41.0 GB',
+                achievements: { unlocked: 22, total: 35 },
+                accentColor: '#a855f7', // Purple
+                accentGlow: 'rgba(168, 85, 247, 0.5)',
+                bgGradient: 'radial-gradient(circle at 65% 30%, #6b21a8 0%, #1e1b4b 50%, #07080c 90%)',
+                cardGradient: 'linear-gradient(145deg, #9333ea 0%, #3b0764 55%, #090a0f 100%)',
+                friendsPlaying: ['Velocity'],
+                synopsis: 'Pilot magnetic plasma crafts at 1,400 km/h across orbital rings and subterranean neon tunnels. Bend gravity and chain boost pads to dominate galactic leagues.',
+                specs: ['OS: Windows 10/11', 'CPU: Core i5-11400 / Ryzen 5 3600', 'GPU: RTX 3060 / RX 6600 XT', 'RAM: 16 GB', 'Storage: 42 GB SSD'],
+                patches: ['v3.1: Added Saturn Ring circuit & telemetry HUD', 'Ultrawide 32:9 FOV calibration options', 'New synthwave soundtrack stems'],
+                svgIllustration: `
+                    <svg viewBox="0 0 300 400" class="w-full h-full object-cover">
+                        <path d="M20 380 L135 160 L165 160 L280 380 Z" fill="none" stroke="#c084fc" stroke-width="2"/>
+                        <line x1="150" y1="160" x2="150" y2="380" stroke="#e879f9" stroke-width="3" stroke-dasharray="18 12"/>
+                        <polygon points="150,195 190,265 150,250 110,265" fill="#f3e8ff"/>
+                        <ellipse cx="150" cy="120" rx="90" ry="22" fill="none" stroke="#a855f7" stroke-width="2.5"/>
+                        <circle cx="150" cy="120" r="28" fill="#d8b4fe" opacity="0.8"/>
+                    </svg>`
+            },
+            {
+                id: 'solstice-hollow',
+                title: 'SOLSTICE HOLLOW',
+                developer: 'MOSS & LANTERN',
+                genre: 'Cozy Indie Adventure',
+                tags: ['Cozy', 'Exploration', 'Crafting', 'Relaxing'],
+                rating: '4.9',
+                reviews: '24.6k',
+                playtime: '64.8 hrs',
+                installed: false,
+                favorite: true,
+                recent: false,
+                size: '14.8 GB',
+                achievements: { unlocked: 19, total: 30 },
+                accentColor: '#34d399', // Emerald
+                accentGlow: 'rgba(52, 211, 153, 0.5)',
+                bgGradient: 'radial-gradient(circle at 60% 30%, #065f46 0%, #064e3b 45%, #07080c 90%)',
+                cardGradient: 'linear-gradient(145deg, #10b981 0%, #064e3b 55%, #052e16 100%)',
+                friendsPlaying: ['Mina_Tea', 'Willow'],
+                synopsis: 'Restore an ancient botanical sanctuary aboard a wandering sky-turtle. Brew herbal elixirs, befriend spirit-foxes, and decorate your floating greenhouse.',
+                specs: ['OS: Windows 10/11', 'CPU: Core i3-9100 / Ryzen 3 3200G', 'GPU: GTX 1650 / Radeon RX 570', 'RAM: 8 GB', 'Storage: 15 GB'],
+                patches: ['v1.6: Autumn Lantern Festival seasonal event', 'Added 24 new potted flora species', 'Steam Deck & controller glyph refinements'],
+                svgIllustration: `
+                    <svg viewBox="0 0 300 400" class="w-full h-full object-cover">
+                        <circle cx="150" cy="135" r="55" fill="#a7f3d0" opacity="0.85"/>
+                        <path d="M40 270 Q150 210 260 270 L260 400 L40 400 Z" fill="#064e3b"/>
+                        <path d="M150 165 L120 245 L180 245 Z" fill="#34d399"/>
+                        <path d="M150 135 L128 205 L172 205 Z" fill="#6ee7b7"/>
+                        <circle cx="95" cy="180" r="4" fill="#fef08a"/>
+                        <circle cx="210" cy="155" r="5" fill="#fef08a"/>
+                        <circle cx="195" cy="215" r="3" fill="#fef08a"/>
+                    </svg>`
+            },
+            {
+                id: 'vanguard-breach',
+                title: 'BREACH PROTOCOL',
+                developer: 'BLACKSITE TACTICAL',
+                genre: 'Tactical FPS',
+                tags: ['Tactical', 'FPS', 'Competitive', 'Destructible'],
+                rating: '4.6',
+                reviews: '42.0k',
+                playtime: '310.4 hrs',
+                installed: true,
+                favorite: false,
+                recent: true,
+                size: '56.0 GB',
+                achievements: { unlocked: 50, total: 50 },
+                accentColor: '#38bdf8', // Sky Blue
+                accentGlow: 'rgba(56, 189, 248, 0.5)',
+                bgGradient: 'radial-gradient(circle at 65% 30%, #0369a1 0%, #0f172a 50%, #07080c 90%)',
+                cardGradient: 'linear-gradient(145deg, #0284c7 0%, #1e293b 55%, #090a0f 100%)',
+                friendsPlaying: ['GhostSix', 'Apex_Z', 'Kaelen'],
+                synopsis: '5v5 close-quarters tactical shooter featuring procedural wall destruction, acoustic recon drones, and synchronized squad breaching mechanics.',
+                specs: ['OS: Windows 11', 'CPU: Core i7-12700 / Ryzen 7 5800X', 'GPU: RTX 3060 Ti / RX 6700 XT', 'RAM: 16 GB', 'Storage: 56 GB SSD'],
+                patches: ['Season 9: Operation Arctic Glass live now', '128-tick ranked servers upgraded in APAC', 'Recoil pattern tuning for VX-9 Carbine'],
+                svgIllustration: `
+                    <svg viewBox="0 0 300 400" class="w-full h-full object-cover">
+                        <circle cx="150" cy="175" r="75" fill="none" stroke="#38bdf8" stroke-width="2"/>
+                        <circle cx="150" cy="175" r="40" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="8 4"/>
+                        <line x1="150" y1="75" x2="150" y2="275" stroke="#7dd3fc" stroke-width="1.5"/>
+                        <line x1="50" y1="175" x2="250" y2="175" stroke="#7dd3fc" stroke-width="1.5"/>
+                        <circle cx="150" cy="175" r="6" fill="#ef4444"/>
+                        <rect x="75" y="295" width="150" height="35" rx="6" fill="none" stroke="#38bdf8" stroke-width="1.5"/>
+                    </svg>`
+            },
+            {
+                id: 'echoes-thalassa',
+                title: 'ECHOES OF THALASSA',
+                developer: 'ABYSSAL WORKS',
+                genre: 'Sci-Fi Horror Mystery',
+                tags: ['Horror', 'Mystery', 'Deep Sea', 'Narrative'],
+                rating: '4.8',
+                reviews: '11.8k',
+                playtime: '19.5 hrs',
+                installed: false,
+                favorite: false,
+                recent: false,
+                size: '49.3 GB',
+                achievements: { unlocked: 8, total: 28 },
+                accentColor: '#f43f5e', // Crimson Rose
+                accentGlow: 'rgba(244, 63, 94, 0.5)',
+                bgGradient: 'radial-gradient(circle at 60% 30%, #881337 0%, #1e1b4b 50%, #07080c 90%)',
+                cardGradient: 'linear-gradient(145deg, #e11d48 0%, #31102f 55%, #090a0f 100%)',
+                friendsPlaying: [],
+                synopsis: 'Four kilometers beneath Europa’s ice crust, Research Station Pelagic has gone silent. Navigate flooded corridors using sonar pulses—just beware what listens back.',
+                specs: ['OS: Windows 10/11', 'CPU: Core i5-12400 / Ryzen 5 5600', 'GPU: RTX 3060 / RX 6600', 'RAM: 16 GB', 'Storage: 50 GB SSD'],
+                patches: ['v1.2: Added Binaural Spatial Audio mode', 'Improved volumetric bioluminescence rendering', 'New permadeath "Abyssal" difficulty'],
+                svgIllustration: `
+                    <svg viewBox="0 0 300 400" class="w-full h-full object-cover">
+                        <circle cx="150" cy="170" r="85" fill="none" stroke="#fb7185" stroke-width="1" opacity="0.4"/>
+                        <circle cx="150" cy="170" r="55" fill="none" stroke="#f43f5e" stroke-width="2" opacity="0.7"/>
+                        <circle cx="150" cy="170" r="24" fill="#be123c"/>
+                        <ellipse cx="150" cy="170" rx="6" ry="18" fill="#090a0f"/>
+                        <path d="M70 290 Q110 250 150 290 T230 290" fill="none" stroke="#fb7185" stroke-width="2"/>
+                        <path d="M50 320 Q100 280 150 320 T250 320" fill="none" stroke="#f43f5e" stroke-width="1.5" opacity="0.6"/>
+                    </svg>`
+            }
+        ];
+
+        const FRIENDS_LIST = [
+            { name: 'Kaelen', status: 'In-Game: Neon Sovereign', online: true, avatar: 'KL', color: 'from-cyan-500 to-blue-600' },
+            { name: 'Valkyrie', status: 'In-Game: Ashes of Valdris', online: true, avatar: 'VK', color: 'from-amber-500 to-orange-600' },
+            { name: 'Nyx_99', status: 'In-Game: Neon Sovereign', online: true, avatar: 'NX', color: 'from-fuchsia-500 to-purple-600' },
+            { name: 'Mina_Tea', status: 'Online • Browsing Store', online: true, avatar: 'MT', color: 'from-emerald-400 to-teal-600' },
+            { name: 'GhostSix', status: 'Offline • 3h ago', online: false, avatar: 'G6', color: 'from-slate-600 to-slate-800' }
+        ];
+
+        // =====================================================================
+        // APPLICATION STATE
+        // =====================================================================
+        let state = {
+            filteredGames: [...GAMES_DATA],
+            activeIndex: 0,
+            filter: 'all',
+            searchQuery: '',
+            soundEnabled: false,
+            bgLayerToggle: false,
+            activeDownloads: {}, // { gameId: progressPercent }
+            launchingTimer: null
+        };
+
+        // Procedural Audio Engine via Tone.js
+        let synth = null;
+        function playUiSound(type = 'tick') {
+            if (!state.soundEnabled || typeof Tone === 'undefined') return;
+            try {
+                if (!synth) {
+                    synth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: 'sine' },
+                        envelope: { attack: 0.005, decay: 0.08, sustain: 0, release: 0.08 }
+                    }).toDestination();
+                    synth.volume.value = -14;
+                }
+                if (Tone.context.state !== 'running') Tone.start();
+
+                if (type === 'tick') {
+                    synth.triggerAttackRelease('C5', '32n');
+                } else if (type === 'select') {
+                    synth.triggerAttackRelease(['E5', 'B5'], '16n');
+                } else if (type === 'launch') {
+                    synth.triggerAttackRelease(['C4', 'G4', 'C5', 'E5'], '8n');
+                }
+            } catch (e) {
+                // Fail silently if audio context blocked
+            }
+        }
+
+        // =====================================================================
+        // INITIALIZATION & EVENT LISTENERS
+        // =====================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            updateClock();
+            setInterval(updateClock, 15000);
+
+            renderCarousel();
+            renderQuickDock();
+            updateHeroUI(true);
+            setupInteractions();
+        });
+
+        function updateClock() {
+            const now = new Date();
+            const formatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('system-clock').textContent = formatted;
+        }
+
+        // =====================================================================
+        // CAROUSEL RENDERING & 3D POSITIONING MATH
+        // =====================================================================
+        function renderCarousel() {
+            const track = document.getElementById('carousel-track');
+            track.innerHTML = '';
+
+            if (state.filteredGames.length === 0) {
+                track.innerHTML = `
+                    <div class="text-center space-y-3 glass-panel px-8 py-6 rounded-3xl">
+                        <div class="text-slate-300 font-display font-bold text-lg">No games match your filter</div>
+                        <button onclick="resetFilters()" class="px-4 py-2 rounded-full bg-cyan-400 text-slate-950 text-xs font-bold">Reset Library View</button>
+                    </div>`;
+                return;
+            }
+
+            state.filteredGames.forEach((game, idx) => {
+                const card = document.createElement('div');
+                card.className = 'carousel-card w-[210px] sm:w-[240px] lg:w-[265px] h-[275px] sm:h-[310px] lg:h-[340px] rounded-3xl overflow-hidden border border-white/15 bg-slate-900 select-none flex flex-col justify-between';
+                card.dataset.index = idx;
+                card.style.setProperty('--accent-glow', game.accentGlow);
+
+                const isDownloading = state.activeDownloads[game.id] !== undefined;
+                const statusBadge = isDownloading
+                    ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 animate-pulse">DL ${state.activeDownloads[game.id]}%</span>`
+                    : game.installed
+                        ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">INSTALLED</span>`
+                        : `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-300 border border-white/15">CLOUD</span>`;
+
+                card.innerHTML = `
+                    <!-- Thematic Gradient & Custom SVG Art -->
+                    <div class="absolute inset-0 pointer-events-none" style="background: ${game.cardGradient};">
+                        ${game.svgIllustration}
+                    </div>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/20 pointer-events-none"></div>
+
+                    <!-- Top Card Meta -->
+                    <div class="relative z-10 p-4 flex items-center justify-between">
+                        ${statusBadge}
+                        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/50 text-amber-400 backdrop-blur-md">★ ${game.rating}</span>
+                    </div>
+
+                    <!-- Bottom Card Title & Genre -->
+                    <div class="relative z-10 p-4 sm:p-5 space-y-1">
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-white/70">${game.genre}</div>
+                        <h3 class="font-display font-extrabold text-lg sm:text-xl leading-tight text-white tracking-tight">${game.title}</h3>
+                        <div class="text-[11px] text-slate-300/80 flex items-center justify-between pt-1">
+                            <span>${game.playtime}</span>
+                            <span>${game.size}</span>
+                        </div>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    if (state.activeIndex !== idx) {
+                        selectGame(idx);
+                    } else {
+                        triggerPrimaryAction();
+                    }
+                });
+
+                track.appendChild(card);
+            });
+
+            positionCarouselCards();
+        }
+
+        function positionCarouselCards() {
+            const cards = document.querySelectorAll('.carousel-card');
+            const total = cards.length;
+            if (total === 0) return;
+
+            const isMobile = window.innerWidth < 640;
+            const xSpacing = isMobile ? 165 : 245;
+
+            cards.forEach((card, i) => {
+                // Compute shortest circular offset so carousel wraps seamlessly
+                let offset = i - state.activeIndex;
+                if (total > 2) {
+                    if (offset > Math.floor(total / 2)) offset -= total;
+                    if (offset < -Math.floor(total / 2)) offset += total;
+                }
+
+                const absOffset = Math.abs(offset);
+                const isCenter = offset === 0;
+
+                // 3D Transform calculations
+                const translateX = offset * xSpacing;
+                const translateZ = isCenter ? 75 : -absOffset * 110;
+                const rotateY = offset * -16; // Tilts outer cards inward toward the center
+                const scale = isCenter ? 1.06 : Math.max(0.72, 1 - absOffset * 0.12);
+                const opacity = absOffset > 2 ? 0 : Math.max(0.35, 1 - absOffset * 0.28);
+
+                card.style.transform = `translate3d(${translateX}px, 0px, ${translateZ}px) rotateY(${rotateY}deg) scale(${scale})`;
+                card.style.opacity = opacity;
+                card.style.zIndex = 20 - absOffset;
+                card.style.filter = isCenter ? 'brightness(1.08)' : `brightness(${Math.max(0.45, 0.85 - absOffset * 0.15)})`;
+
+                if (isCenter) {
+                    card.classList.add('active-card-ring', 'border-white/40');
+                } else {
+                    card.classList.remove('active-card-ring', 'border-white/40');
+                }
+            });
+        }
+
+        function selectGame(newIndex) {
+            const total = state.filteredGames.length;
+            if (total === 0) return;
+
+            state.activeIndex = (newIndex + total) % total;
+            playUiSound('tick');
+            positionCarouselCards();
+            updateHeroUI();
+            updateQuickDockHighlight();
+        }
+
+        // =====================================================================
+        // HERO & DYNAMIC AMBIENT BACKDROP UPDATES
+        // =====================================================================
+        function updateHeroUI(instant = false) {
+            const game = state.filteredGames[state.activeIndex];
+            if (!game) return;
+
+            // Crossfade full-bleed ambient backdrop
+            const layerA = document.getElementById('bg-layer-a');
+            const layerB = document.getElementById('bg-layer-b');
+            if (instant) {
+                layerA.style.background = game.bgGradient;
+            } else {
+                state.bgLayerToggle = !state.bgLayerToggle;
+                const incoming = state.bgLayerToggle ? layerB : layerA;
+                const outgoing = state.bgLayerToggle ? layerA : layerB;
+                incoming.style.background = game.bgGradient;
+                incoming.classList.replace('opacity-0', 'opacity-100');
+                outgoing.classList.replace('opacity-100', 'opacity-0');
+            }
+
+            // Update Hero Text & Metadata
+            document.getElementById('hero-developer').textContent = game.developer;
+            document.getElementById('hero-developer').style.color = game.accentColor;
+            document.getElementById('hero-title').textContent = game.title;
+            document.getElementById('hero-synopsis').textContent = game.synopsis;
+            document.getElementById('hero-playtime').textContent = game.playtime;
+            document.getElementById('hero-rating').textContent = game.rating;
+
+            // Tags
+            const tagsContainer = document.getElementById('hero-tags');
+            tagsContainer.innerHTML = game.tags.map(tag => 
+                `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-slate-200 border border-white/10">${tag}</span>`
+            ).join('');
+
+            // Favorite Heart State
+            const heartIcon = document.getElementById('favorite-heart-icon');
+            if (game.favorite) {
+                heartIcon.setAttribute('fill', '#fb7185');
+                heartIcon.classList.add('text-rose-400');
+            } else {
+                heartIcon.setAttribute('fill', 'none');
+                heartIcon.classList.remove('text-rose-400');
+            }
+
+            // Achievements
+            const pct = Math.round((game.achievements.unlocked / game.achievements.total) * 100);
+            document.getElementById('hero-achievements-pct').textContent = `${pct}%`;
+            document.getElementById('hero-achievements-bar').style.width = `${pct}%`;
+            document.getElementById('hero-achievements-bar').style.background = game.accentColor;
+            document.getElementById('hero-achievements-count').textContent = `${game.achievements.unlocked} / ${game.achievements.total} Unlocked`;
+
+            // Friends Playing Avatars
+            const avatarsEl = document.getElementById('hero-friends-avatars');
+            const friendsLabel = document.getElementById('hero-friends-label');
+            if (game.friendsPlaying.length > 0) {
+                avatarsEl.innerHTML = game.friendsPlaying.map(name => `
+                    <div title="${name}" class="w-7 h-7 rounded-full bg-slate-800 border-2 border-[#0f1119] flex items-center justify-center text-[10px] font-bold text-white shadow">
+                        ${name.slice(0, 2).toUpperCase()}
+                    </div>
+                `).join('');
+                friendsLabel.textContent = `${game.friendsPlaying.length} playing now`;
+                friendsLabel.className = 'text-[11px] text-emerald-400 truncate';
+            } else {
+                avatarsEl.innerHTML = `<span class="text-xs text-slate-500 italic">None active</span>`;
+                friendsLabel.textContent = 'Solo session ready';
+                friendsLabel.className = 'text-[11px] text-slate-400 truncate';
+            }
+
+            // Update Primary CTA Button (PLAY vs INSTALL vs DOWNLOADING)
+            updatePrimaryActionButton(game);
+        }
+
+        function updatePrimaryActionButton(game) {
+            const btn = document.getElementById('primary-action-btn');
+            const label = document.getElementById('primary-action-label');
+            const icon = document.getElementById('primary-action-icon');
+            const statusText = document.getElementById('hero-status-text');
+
+            const dlProgress = state.activeDownloads[game.id];
+
+            if (dlProgress !== undefined) {
+                btn.style.backgroundColor = '#38bdf8';
+                btn.style.boxShadow = '0 10px 25px -5px rgba(56, 189, 248, 0.4)';
+                label.textContent = `DOWNLOADING ${dlProgress}%`;
+                icon.innerHTML = `<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>`;
+                statusText.textContent = `Installing... (${dlProgress}% of ${game.size})`;
+            } else if (game.installed) {
+                btn.style.backgroundColor = game.accentColor;
+                btn.style.boxShadow = `0 10px 30px -5px ${game.accentGlow}`;
+                label.textContent = 'PLAY NOW';
+                icon.innerHTML = `<svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+                statusText.textContent = `Installed • ${game.size}`;
+            } else {
+                btn.style.backgroundColor = '#f8fafc';
+                btn.style.boxShadow = '0 10px 25px -5px rgba(255, 255, 255, 0.25)';
+                label.textContent = `INSTALL (${game.size})`;
+                icon.innerHTML = `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>`;
+                statusText.textContent = `Cloud Library • ${game.size}`;
+            }
+        }
+
+        // =====================================================================
+        // LAUNCH & DOWNLOAD SIMULATIONS
+        // =====================================================================
+        function triggerPrimaryAction() {
+            const game = state.filteredGames[state.activeIndex];
+            if (!game) return;
+
+            if (state.activeDownloads[game.id] !== undefined) {
+                showToast(`${game.title} is currently downloading (${state.activeDownloads[game.id]}%)`);
+                return;
+            }
+
+            if (game.installed) {
+                startGameLaunchSimulation(game);
+            } else {
+                startDownloadSimulation(game);
+            }
+        }
+
+        function startGameLaunchSimulation(game) {
+            playUiSound('launch');
+            const overlay = document.getElementById('launch-overlay');
+            const bar = document.getElementById('launch-progress-bar');
+            document.getElementById('launch-game-title').textContent = game.title;
+            bar.style.backgroundColor = game.accentColor;
+            bar.style.width = '0%';
+
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+
+            let progress = 0;
+            clearInterval(state.launchingTimer);
+            state.launchingTimer = setInterval(() => {
+                progress += Math.floor(Math.random() * 18) + 12;
+                if (progress >= 100) {
+                    progress = 100;
+                    bar.style.width = '100%';
+                    clearInterval(state.launchingTimer);
+                    setTimeout(() => {
+                        overlay.classList.add('hidden');
+                        overlay.classList.remove('flex');
+                        game.recent = true;
+                        showToast(`Session ended: ${game.title}`);
+                    }, 750);
+                } else {
+                    bar.style.width = `${progress}%`;
+                }
+            }, 300);
+        }
+
+        function startDownloadSimulation(game) {
+            playUiSound('select');
+            state.activeDownloads[game.id] = 0;
+            updateDownloadBadge();
+            renderCarousel();
+            updatePrimaryActionButton(game);
+            showToast(`Downloading ${game.title}...`);
+
+            const interval = setInterval(() => {
+                if (state.activeDownloads[game.id] === undefined) {
+                    clearInterval(interval);
+                    return;
+                }
+                state.activeDownloads[game.id] += Math.floor(Math.random() * 12) + 6;
+                if (state.activeDownloads[game.id] >= 100) {
+                    delete state.activeDownloads[game.id];
+                    game.installed = true;
+                    clearInterval(interval);
+                    playUiSound('select');
+                    showToast(`${game.title} installation complete!`);
+                }
+                updateDownloadBadge();
+                renderCarousel();
+                const currentGame = state.filteredGames[state.activeIndex];
+                if (currentGame && currentGame.id === game.id) {
+                    updatePrimaryActionButton(game);
+                }
+            }, 450);
+        }
+
+        function updateDownloadBadge() {
+            const keys = Object.keys(state.activeDownloads);
+            const text = document.getElementById('download-status-text');
+            const badge = document.getElementById('download-badge');
+            if (keys.length > 0) {
+                const firstPct = state.activeDownloads[keys[0]];
+                text.textContent = `${keys.length} Active (${firstPct}%)`;
+                badge.classList.remove('hidden');
+            } else {
+                text.textContent = 'Idle';
+                badge.classList.add('hidden');
+            }
+        }
+
+        // =====================================================================
+        // QUICK DOCK, FILTERS, MODALS & DRAWERS
+        // =====================================================================
+        function renderQuickDock() {
+            const dock = document.getElementById('quick-dock');
+            dock.innerHTML = state.filteredGames.map((game, idx) => `
+                <button onclick="selectGame(${idx})" data-dock-idx="${idx}"
+                    class="dock-item px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 transition-all border ${idx === state.activeIndex ? 'bg-white/15 border-white/30 text-white' : 'bg-white/[0.04] border-white/10 text-slate-400 hover:text-white hover:bg-white/10'}">
+                    <span class="w-2 h-2 rounded-full" style="background:${game.accentColor}"></span>
+                    <span class="truncate max-w-[110px]">${game.title}</span>
+                </button>
+            `).join('');
+        }
+
+        function updateQuickDockHighlight() {
+            document.querySelectorAll('.dock-item').forEach((btn, idx) => {
+                if (idx === state.activeIndex) {
+                    btn.className = 'dock-item px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 transition-all border bg-white/15 border-white/30 text-white';
+                } else {
+                    btn.className = 'dock-item px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 transition-all border bg-white/[0.04] border-white/10 text-slate-400 hover:text-white hover:bg-white/10';
+                }
+            });
+        }
+
+        function applyFilters() {
+            state.filteredGames = GAMES_DATA.filter(g => {
+                const matchesCategory =
+                    state.filter === 'all' ||
+                    (state.filter === 'installed' && g.installed) ||
+                    (state.filter === 'favorites' && g.favorite) ||
+                    (state.filter === 'recent' && g.recent);
+
+                const q = state.searchQuery.toLowerCase().trim();
+                const matchesSearch = !q ||
+                    g.title.toLowerCase().includes(q) ||
+                    g.genre.toLowerCase().includes(q) ||
+                    g.tags.some(t => t.toLowerCase().includes(q));
+
+                return matchesCategory && matchesSearch;
+            });
+
+            state.activeIndex = 0;
+            renderCarousel();
+            renderQuickDock();
+            updateHeroUI();
+        }
+
+        function resetFilters() {
+            state.filter = 'all';
+            state.searchQuery = '';
+            document.getElementById('search-input').value = '';
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.classList.remove('bg-white', 'text-slate-950', 'shadow-sm');
+                b.classList.add('text-slate-300');
+                if (b.dataset.filter === 'all') {
+                    b.classList.add('bg-white', 'text-slate-950', 'shadow-sm');
+                    b.classList.remove('text-slate-300');
+                }
+            });
+            applyFilters();
+        }
+
+        function openGameDetailsModal() {
+            const game = state.filteredGames[state.activeIndex];
+            if (!game) return;
+            playUiSound('select');
+
+            document.getElementById('modal-banner').style.background = game.cardGradient;
+            document.getElementById('modal-genre-badge').textContent = game.genre;
+            document.getElementById('modal-title').textContent = game.title;
+            document.getElementById('modal-dev').textContent = `Developed by ${game.developer} • Verified Deck & PC Ready`;
+            document.getElementById('modal-full-desc').textContent = game.synopsis;
+
+            document.getElementById('modal-specs').innerHTML = game.specs.map(s => `<li>• ${s}</li>`).join('');
+            document.getElementById('modal-patches').innerHTML = game.patches.map(p => `<li>${p}</li>`).join('');
+
+            const modal = document.getElementById('game-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function openDrawer(mode) {
+            playUiSound('select');
+            const drawer = document.getElementById('side-drawer');
+            const title = document.getElementById('drawer-title');
+            const content = document.getElementById('drawer-content');
+
+            if (mode === 'friends') {
+                title.textContent = 'Friends & Squads';
+                content.innerHTML = FRIENDS_LIST.map(f => `
+                    <div class="p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br ${f.color} flex items-center justify-center font-display font-bold text-xs text-white relative">
+                                ${f.avatar}
+                                <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ${f.online ? 'bg-emerald-400' : 'bg-slate-500'} border-2 border-slate-900"></span>
+                            </div>
+                            <div>
+                                <div class="text-sm font-semibold text-white">${f.name}</div>
+                                <div class="text-xs ${f.online ? 'text-emerald-400' : 'text-slate-400'}">${f.status}</div>
+                            </div>
+                        </div>
+                        ${f.online ? `<button onclick="showToast('Game invite sent to ${f.name}')" class="px-3 py-1.5 rounded-full bg-white/10 hover:bg-cyan-400 hover:text-slate-950 text-xs font-medium transition-colors">Invite</button>` : ''}
+                    </div>
+                `).join('');
+            } else {
+                title.textContent = 'Download Manager';
+                const activeIds = Object.keys(state.activeDownloads);
+                if (activeIds.length === 0) {
+                    content.innerHTML = `
+                        <div class="text-center py-12 space-y-2">
+                            <div class="text-slate-300 font-medium">No active downloads</div>
+                            <p class="text-xs text-slate-500">All installed titles are up to date with the latest patches.</p>
+                        </div>`;
+                } else {
+                    content.innerHTML = activeIds.map(id => {
+                        const g = GAMES_DATA.find(item => item.id === id);
+                        const pct = state.activeDownloads[id];
+                        return `
+                            <div class="p-4 rounded-2xl bg-white/[0.05] border border-white/10 space-y-2">
+                                <div class="flex justify-between text-xs font-semibold">
+                                    <span class="text-white">${g.title}</span>
+                                    <span class="text-cyan-400">${pct}%</span>
+                                </div>
+                                <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                                    <div class="h-full bg-cyan-400 transition-all" style="width:${pct}%"></div>
+                                </div>
+                                <div class="text-[11px] text-slate-400">Peak Speed: 118.4 MB/s • ${g.size}</div>
+                            </div>`;
+                    }).join('');
+                }
+            }
+
+            drawer.classList.remove('translate-x-full');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast-pill');
+            toast.textContent = msg;
+            toast.classList.remove('opacity-0');
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => toast.classList.add('opacity-0'), 2600);
+        }
+
+        // =====================================================================
+        // INPUT HANDLERS: KEYBOARD, WHEEL, DRAG/SWIPE & BUTTONS
+        // =====================================================================
+        function setupInteractions() {
+            // Carousel Nav Buttons
+            document.getElementById('prev-btn').addEventListener('click', () => selectGame(state.activeIndex - 1));
+            document.getElementById('next-btn').addEventListener('click', () => selectGame(state.activeIndex + 1));
+
+            // Primary Action & Details Modal
+            document.getElementById('primary-action-btn').addEventListener('click', triggerPrimaryAction);
+            document.getElementById('details-modal-btn').addEventListener('click', openGameDetailsModal);
+            document.getElementById('close-modal-btn').addEventListener('click', () => {
+                document.getElementById('game-modal').classList.add('hidden');
+                document.getElementById('game-modal').classList.remove('flex');
+            });
+
+            // Cancel Launch Button
+            document.getElementById('cancel-launch-btn').addEventListener('click', () => {
+                clearInterval(state.launchingTimer);
+                document.getElementById('launch-overlay').classList.add('hidden');
+                document.getElementById('launch-overlay').classList.remove('flex');
+                showToast('Launch aborted');
+            });
+
+            // Favorite Heart Button
+            document.getElementById('favorite-toggle-btn').addEventListener('click', () => {
+                const game = state.filteredGames[state.activeIndex];
+                if (!game) return;
+                game.favorite = !game.favorite;
+                playUiSound('select');
+                updateHeroUI();
+                showToast(game.favorite ? `Added ${game.title} to Favorites` : `Removed ${game.title} from Favorites`);
+            });
+
+            // Category Filter Pills
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => {
+                        b.classList.remove('bg-white', 'text-slate-950', 'shadow-sm');
+                        b.classList.add('text-slate-300');
+                    });
+                    btn.classList.add('bg-white', 'text-slate-950', 'shadow-sm');
+                    btn.classList.remove('text-slate-300');
+                    state.filter = btn.dataset.filter;
+                    playUiSound('tick');
+                    applyFilters();
+                });
+            });
+
+            // Search Input
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                state.searchQuery = e.target.value;
+                applyFilters();
+            });
+
+            // Sound Toggle
+            document.getElementById('sound-toggle').addEventListener('click', () => {
+                state.soundEnabled = !state.soundEnabled;
+                document.getElementById('sound-icon-on').classList.toggle('hidden', !state.soundEnabled);
+                document.getElementById('sound-icon-off').classList.toggle('hidden', state.soundEnabled);
+                if (state.soundEnabled) playUiSound('select');
+                showToast(state.soundEnabled ? 'UI Sound Effects Enabled' : 'UI Sound Effects Muted');
+            });
+
+            // Drawers
+            document.getElementById('friends-btn').addEventListener('click', () => openDrawer('friends'));
+            document.getElementById('downloads-btn').addEventListener('click', () => openDrawer('downloads'));
+            document.getElementById('close-drawer-btn').addEventListener('click', () => {
+                document.getElementById('side-drawer').classList.add('translate-x-full');
+            });
+
+            // Keyboard Arrow Navigation & Enter
+            window.addEventListener('keydown', (e) => {
+                if (document.activeElement.tagName === 'INPUT') return;
+                if (e.key === 'ArrowRight') selectGame(state.activeIndex + 1);
+                if (e.key === 'ArrowLeft') selectGame(state.activeIndex - 1);
+                if (e.key === 'Enter') triggerPrimaryAction();
+                if (e.key === 'Escape') {
+                    document.getElementById('game-modal').classList.add('hidden');
+                    document.getElementById('game-modal').classList.remove('flex');
+                    document.getElementById('side-drawer').classList.add('translate-x-full');
+                }
+            });
+
+            // Mouse Wheel Horizontal / Vertical Scroll on Carousel
+            let wheelLock = false;
+            document.getElementById('carousel-container').addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (wheelLock) return;
+                const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                if (Math.abs(delta) > 12) {
+                    wheelLock = true;
+                    selectGame(state.activeIndex + (delta > 0 ? 1 : -1));
+                    setTimeout(() => { wheelLock = false; }, 220);
+                }
+            }, { passive: false });
+
+            // Touch & Mouse Drag Swipe Support
+            let startX = 0;
+            let isDragging = false;
+            const stage = document.getElementById('carousel-container');
+
+            stage.addEventListener('pointerdown', (e) => {
+                startX = e.clientX;
+                isDragging = true;
+            });
+
+            window.addEventListener('pointerup', (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                const diff = e.clientX - startX;
+                if (Math.abs(diff) > 45) {
+                    selectGame(state.activeIndex + (diff < 0 ? 1 : -1));
+                }
+            });
+
+            // Responsive Resize Recalculation
+            window.addEventListener('resize', positionCarouselCards);
+        }
+    </script>
+</body>
+</html>
