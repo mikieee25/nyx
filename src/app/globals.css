@@ -744,10 +744,46 @@ select:focus-visible {
   color: var(--color-ink);
   background: #141d2a;
   font-size: 0.73rem;
+  text-align: left;
+  cursor: pointer;
   transition:
     background var(--duration-ui) var(--ease-ui),
     border-color var(--duration-ui) var(--ease-ui),
     box-shadow var(--duration-ui) var(--ease-ui);
+}
+.select-executable-options {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  left: 0;
+  display: grid;
+  max-height: min(15rem, 45vh);
+  overflow-y: auto;
+  padding: 0.3rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.7rem;
+  background: #141d2a;
+  box-shadow: 0 14px 32px rgb(0 0 0 / 45%);
+}
+.select-executable-option {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.45rem;
+  color: var(--color-ink);
+  background: transparent;
+  font-size: 0.73rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.select-executable-option:hover,
+.select-executable-option[aria-selected="true"] {
+  color: #081216;
+  background: var(--color-accent);
 }
 .select-executable-chevron {
   position: absolute;

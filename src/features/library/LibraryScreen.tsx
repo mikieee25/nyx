@@ -105,6 +105,8 @@ export default function LibraryScreen() {
   }>({ previous: null, current: null });
   const [controllerMode, setControllerMode] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
+  const [exePickerOpen, setExePickerOpen] = useState(false);
+  const [exeOptionIndex, setExeOptionIndex] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [artTint, setArtTint] = useState("rgba(42, 126, 150, .34)");
   const [artworkOpen, setArtworkOpen] = useState(false);
@@ -313,6 +315,29 @@ export default function LibraryScreen() {
   const selectedExe = selected?.executables.find(
     (exe) => exe.path === chosenPath,
   );
+  const openExePicker = useCallback(() => {
+    if (!selected) return;
+    const selectedIndex = selected.executables.findIndex(
+      (exe) => exe.path === chosenPath,
+    );
+    setExeOptionIndex(Math.max(0, selectedIndex));
+    setExePickerOpen(true);
+  }, [chosenPath, selected]);
+  const closeExePicker = useCallback(() => setExePickerOpen(false), []);
+  const chooseExecutable = useCallback(
+    (path: string) => {
+      if (selected)
+        updatePreferences((old) => ({
+          ...old,
+          executableByGame: {
+            ...old.executableByGame,
+            [selected.path]: path,
+          },
+        }));
+      setExePickerOpen(false);
+    },
+    [selected, updatePreferences],
+  );
 
   useEffect(() => {
     if (!selected?.coverDataUrl) {
@@ -495,12 +520,35 @@ export default function LibraryScreen() {
       }
       if (action === "options") {
         const executableSelect =
-          document.querySelector<HTMLSelectElement>("#exe-select");
+          document.querySelector<HTMLButtonElement>("#exe-select");
         if (executableSelect) {
           executableSelect.focus();
           return true;
         }
         setNotice("This game has no alternate executable to select.");
+        return false;
+      }
+      if (exePickerOpen) {
+        if (action === "back") {
+          closeExePicker();
+          return true;
+        }
+        if (action === "up" || action === "down") {
+          if (!selected?.executables.length) return false;
+          const direction = action === "up" ? -1 : 1;
+          setExeOptionIndex(
+            (index) =>
+              (index + direction + selected.executables.length) %
+              selected.executables.length,
+          );
+          return true;
+        }
+        if (action === "confirm") {
+          const executable = selected?.executables[exeOptionIndex];
+          if (!executable) return false;
+          chooseExecutable(executable.path);
+          return true;
+        }
         return false;
       }
       if (action === "previous-tab" || action === "next-tab") {
@@ -520,6 +568,10 @@ export default function LibraryScreen() {
         return focusStep(action === "up" ? -1 : 1);
       if (action === "confirm") {
         const focused = document.activeElement;
+        if (focused instanceof HTMLElement && focused.id === "exe-select") {
+          openExePicker();
+          return true;
+        }
         if (
           focused instanceof HTMLElement &&
           focused.matches(".carousel-card.is-active")
@@ -546,6 +598,10 @@ export default function LibraryScreen() {
     },
     [
       artworkOpen,
+      chooseExecutable,
+      closeExePicker,
+      exeOptionIndex,
+      exePickerOpen,
       filter,
       focusStep,
       intro,
@@ -553,6 +609,8 @@ export default function LibraryScreen() {
       moveSelection,
       query,
       readLibrary,
+      openExePicker,
+      selected,
       startGame,
     ],
   );
@@ -1106,37 +1164,76 @@ export default function LibraryScreen() {
                   Find artwork
                 </button>
                 {selected.executables.length > 1 && (
-                  <label className="sr-only" htmlFor="exe-select">
-                    Choose game executable
-                  </label>
-                )}
-                {selected.executables.length > 1 && (
                   <div className="select-executable-wrap">
-                    <select
+                    <button
                       id="exe-select"
                       className="select-executable"
-                      value={chosenPath}
-                      onChange={(event) =>
-                        updatePreferences((old) => ({
-                          ...old,
-                          executableByGame: {
-                            ...old.executableByGame,
-                            [selected.path]: event.target.value,
-                          },
-                        }))
+                      type="button"
+                      aria-label="Choose game executable"
+                      aria-haspopup="listbox"
+                      aria-expanded={exePickerOpen}
+                      aria-controls="exe-options"
+                      aria-activedescendant={
+                        exePickerOpen ? `exe-option-${exeOptionIndex}` : undefined
                       }
+                      onClick={() =>
+                        exePickerOpen ? closeExePicker() : openExePicker()
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                          event.preventDefault();
+                          if (!exePickerOpen) openExePicker();
+                          else {
+                            const direction = event.key === "ArrowUp" ? -1 : 1;
+                            setExeOptionIndex(
+                              (index) =>
+                                (index + direction + selected.executables.length) %
+                                selected.executables.length,
+                            );
+                          }
+                        } else if (event.key === "Escape" && exePickerOpen) {
+                          event.preventDefault();
+                          closeExePicker();
+                        } else if (
+                          (event.key === "Enter" || event.key === " ") &&
+                          exePickerOpen
+                        ) {
+                          event.preventDefault();
+                          const executable = selected.executables[exeOptionIndex];
+                          if (executable) chooseExecutable(executable.path);
+                        }
+                      }}
                     >
-                      <option value="">Choose launch file…</option>
-                      {selected.executables.map((exe) => (
-                        <option key={exe.path} value={exe.path}>
-                          {exe.name}
-                        </option>
-                      ))}
-                    </select>
+                      {selectedExe?.name ?? "Choose launch file…"}
+                    </button>
                     <ChevronDown
                       className="select-executable-chevron ui-icon"
                       aria-hidden="true"
                     />
+                    {exePickerOpen && (
+                      <div
+                        id="exe-options"
+                        className="select-executable-options"
+                        role="listbox"
+                        aria-label="Available game executables"
+                      >
+                        {selected.executables.map((exe, index) => (
+                          <button
+                            key={exe.path}
+                            type="button"
+                            className="select-executable-option"
+                            id={`exe-option-${index}`}
+                            role="option"
+                            aria-selected={index === exeOptionIndex}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onMouseEnter={() => setExeOptionIndex(index)}
+                            onClick={() => chooseExecutable(exe.path)}
+                          >
+                            {exe.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
