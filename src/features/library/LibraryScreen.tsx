@@ -98,7 +98,7 @@ export default function LibraryScreen() {
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [scanError, setScanError] = useState("");
   const [notice, setNotice] = useState("");
-  const [intro, setIntro] = useState(false);
+  const [intro, setIntro] = useState(true);
   const [backdropImages, setBackdropImages] = useState<{
     previous: string | null;
     current: string | null;
@@ -279,7 +279,6 @@ export default function LibraryScreen() {
   useEffect(() => {
     if (!preferencesReady || startupCuePlayed.current) return;
     startupCuePlayed.current = true;
-    setIntro(true);
     if (preferences.soundEnabled && isTauri()) playCue("launch", true);
   }, [preferences.soundEnabled, preferencesReady]);
 
