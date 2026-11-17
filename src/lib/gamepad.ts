@@ -2,54 +2,287 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type PadAction = "left" | "right" | "up" | "down" | "confirm" | "back" | "start";
+export type PadAction =
+  | "left"
+  | "right"
+  | "up"
+  | "down"
+  | "confirm"
+  | "back"
+  | "options"
+  | "rescan"
+  | "previous-tab"
+  | "next-tab"
+  | "start";
 
-export function useGamepad(onAction: (action: PadAction) => void) {
+type Direction = "left" | "right" | "up" | "down";
+type Pulse = { duration: number; weakMagnitude: number; strongMagnitude: number };
+type RepeatState = { active: boolean; nextAt: number };
+type PadState = {
+  buttons: Set<number>;
+  axisX: -1 | 0 | 1;
+  axisY: -1 | 0 | 1;
+  repeat: Record<Direction, RepeatState>;
+  previousValues: number[];
+};
+type ActionRef = { current: (action: PadAction) => boolean | void };
+type BooleanRef = { current: boolean };
+type NoticeRef = { current: ((message: string) => void) | undefined };
+
+const DIRECTIONS: Direction[] = ["left", "right", "up", "down"];
+const BUTTON_ACTIONS: Partial<Record<number, PadAction>> = {
+  0: "confirm",
+  1: "back",
+  2: "options",
+  3: "rescan",
+  4: "previous-tab",
+  5: "next-tab",
+  9: "start",
+};
+const PULSES: Partial<Record<PadAction, Pulse>> = {
+  left: { duration: 26, weakMagnitude: 0.12, strongMagnitude: 0.08 },
+  right: { duration: 26, weakMagnitude: 0.12, strongMagnitude: 0.08 },
+  up: { duration: 26, weakMagnitude: 0.12, strongMagnitude: 0.08 },
+  down: { duration: 26, weakMagnitude: 0.12, strongMagnitude: 0.08 },
+  "previous-tab": { duration: 26, weakMagnitude: 0.12, strongMagnitude: 0.08 },
+  "next-tab": { duration: 26, weakMagnitude: 0.12, strongMagnitude: 0.08 },
+  confirm: { duration: 65, weakMagnitude: 0.3, strongMagnitude: 0.2 },
+  rescan: { duration: 65, weakMagnitude: 0.3, strongMagnitude: 0.2 },
+  start: { duration: 65, weakMagnitude: 0.3, strongMagnitude: 0.2 },
+};
+
+function createPadState(): PadState {
+  const repeat = {} as Record<Direction, RepeatState>;
+  for (const direction of DIRECTIONS)
+    repeat[direction] = { active: false, nextAt: 0 };
+  return { buttons: new Set(), axisX: 0, axisY: 0, repeat, previousValues: [] };
+}
+
+function readAxis(value: number): -1 | 0 | 1 {
+  return value > 0.65 ? 1 : value < -0.65 ? -1 : 0;
+}
+
+function updateAxis(previous: -1 | 0 | 1, value: number): -1 | 0 | 1 {
+  if (previous < 0) {
+    if (value > 0.65) return 1;
+    return value > -0.35 ? 0 : -1;
+  }
+  if (previous > 0) {
+    if (value < -0.65) return -1;
+    return value < 0.35 ? 0 : 1;
+  }
+  return readAxis(value);
+}
+
+function dispatchAction(
+  pad: Gamepad,
+  action: PadAction,
+  actionRef: ActionRef,
+  vibrationRef: BooleanRef,
+  warnedVibration: Set<number>,
+) {
+  if (actionRef.current(action) === false || !vibrationRef.current) return;
+  const pulse = PULSES[action];
+  if (!pulse) return;
+  const actuator = pad.vibrationActuator;
+  if (!actuator) {
+    if (!warnedVibration.has(pad.index)) {
+      warnedVibration.add(pad.index);
+      console.warn(`[Nyx gamepad] ${pad.id} does not expose vibration support.`);
+    }
+    return;
+  }
+  void actuator.playEffect("dual-rumble", pulse).catch((error: unknown) => {
+    if (warnedVibration.has(pad.index)) return;
+    warnedVibration.add(pad.index);
+    console.warn(`[Nyx gamepad] Vibration failed for ${pad.id}.`, error);
+  });
+}
+
+function updateRepeat(
+  pad: Gamepad,
+  state: PadState,
+  direction: Direction,
+  pressed: boolean,
+  now: number,
+  actionRef: ActionRef,
+  vibrationRef: BooleanRef,
+  warnedVibration: Set<number>,
+) {
+  const repeat = state.repeat[direction];
+  if (!pressed) {
+    repeat.active = false;
+    return;
+  }
+  if (!repeat.active) {
+    repeat.active = true;
+    repeat.nextAt = now + 400;
+    dispatchAction(pad, direction, actionRef, vibrationRef, warnedVibration);
+  } else if (now >= repeat.nextAt) {
+    repeat.nextAt = now + 120;
+    dispatchAction(pad, direction, actionRef, vibrationRef, warnedVibration);
+  }
+}
+
+function seedBaseline(pad: Gamepad, state: PadState, now: number) {
+  state.buttons.clear();
+  for (let index = 0; index < pad.buttons.length; index++) {
+    const button = pad.buttons[index];
+    if (button?.pressed) state.buttons.add(index);
+    state.previousValues[index] = button?.value ?? 0;
+  }
+  state.previousValues.length = pad.buttons.length;
+  state.axisX = readAxis(pad.axes[0] ?? 0);
+  state.axisY = readAxis(pad.axes[1] ?? 0);
+  const directions: Record<Direction, boolean> = {
+    left: state.buttons.has(14) || state.axisX < 0,
+    right: state.buttons.has(15) || state.axisX > 0,
+    up: state.buttons.has(12) || state.axisY < 0,
+    down: state.buttons.has(13) || state.axisY > 0,
+  };
+  for (const direction of DIRECTIONS) {
+    state.repeat[direction].active = directions[direction];
+    state.repeat[direction].nextAt = now + 400;
+  }
+}
+
+export function useGamepad(
+  onAction: (action: PadAction) => boolean | void,
+  vibrationEnabled = true,
+  onNotice?: (message: string) => void,
+  enabled = true,
+) {
   const actionRef = useRef(onAction);
+  const vibrationRef = useRef(vibrationEnabled);
+  const noticeRef = useRef(onNotice);
+  const enabledRef = useRef(enabled);
   const [connected, setConnected] = useState(false);
 
-  useEffect(() => { actionRef.current = onAction; }, [onAction]);
+  useEffect(() => {
+    actionRef.current = onAction;
+    vibrationRef.current = vibrationEnabled;
+    noticeRef.current = onNotice;
+    enabledRef.current = enabled;
+  }, [enabled, onAction, onNotice, vibrationEnabled]);
 
   useEffect(() => {
-    const held = new Map<number, Set<number>>();
-    const sync = () => setConnected(Array.from(navigator.getGamepads()).some(Boolean));
-    const onConnect = () => sync();
-    const onDisconnect = () => sync();
-    window.addEventListener("gamepadconnected", onConnect);
-    window.addEventListener("gamepaddisconnected", onDisconnect);
-    sync();
-
+    const states = new Map<number, PadState>();
+    const warnedVibration = new Set<number>();
+    const warnedMapping = new Set<number>();
+    let connectedValue = false;
+    let resetBaseline = true;
     let frame = 0;
+
+    const reset = () => {
+      resetBaseline = true;
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") reset();
+      else resetBaseline = true;
+    };
+    window.addEventListener("focus", reset);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     const poll = () => {
-      for (const pad of Array.from(navigator.getGamepads())) {
+      const pads = navigator.getGamepads();
+      const now = performance.now();
+      let anyConnected = false;
+
+      for (let index = 0; index < pads.length; index++) {
+        const pad = pads[index];
         if (!pad) continue;
-        const prior = held.get(pad.index) ?? new Set<number>();
-        const current = new Set(pad.buttons.flatMap((button, index) => button.pressed ? [index] : []));
-        const fire = (id: number, action: PadAction) => {
-          if (current.has(id) && !prior.has(id)) actionRef.current(action);
-        };
-        const axisX = Math.abs(pad.axes[0] ?? 0) > 0.65 ? Math.sign(pad.axes[0]) : 0;
-        const axisY = Math.abs(pad.axes[1] ?? 0) > 0.65 ? Math.sign(pad.axes[1]) : 0;
-        const left = current.has(14) || axisX < 0;
-        const right = current.has(15) || axisX > 0;
-        const up = current.has(12) || axisY < 0;
-        const down = current.has(13) || axisY > 0;
-        if (left && !prior.has(14)) actionRef.current("left");
-        if (right && !prior.has(15)) actionRef.current("right");
-        if (up && !prior.has(12)) actionRef.current("up");
-        if (down && !prior.has(13)) actionRef.current("down");
-        fire(0, "confirm");
-        fire(1, "back");
-        fire(9, "start");
-        held.set(pad.index, new Set([...current, ...(left ? [14] : []), ...(right ? [15] : []), ...(up ? [12] : []), ...(down ? [13] : [])]));
+        anyConnected = true;
+
+        const active =
+          enabledRef.current &&
+          document.hasFocus() &&
+          document.visibilityState === "visible";
+        let state = states.get(pad.index);
+        const isNew = !state;
+        if (!state) {
+          state = createPadState();
+          states.set(pad.index, state);
+        }
+        if (!active) {
+          seedBaseline(pad, state, now);
+          resetBaseline = true;
+          continue;
+        }
+
+        if (pad.mapping !== "standard" && !warnedMapping.has(pad.index)) {
+          warnedMapping.add(pad.index);
+          console.warn(
+            `[Nyx gamepad] ${pad.id} uses non-standard mapping (${pad.mapping || "unmapped"}).`,
+          );
+          noticeRef.current?.(
+            `Controller layout is non-standard (${pad.id}); some buttons may behave differently.`,
+          );
+        }
+
+        if (isNew) {
+          seedBaseline(pad, state, now);
+          continue;
+        }
+
+        if (process.env.NODE_ENV !== "production") {
+          const changedButtons: string[] = [];
+          for (let buttonIndex = 0; buttonIndex < pad.buttons.length; buttonIndex++) {
+            const value = pad.buttons[buttonIndex].value;
+            if (Math.abs(value - (state.previousValues[buttonIndex] ?? 0)) >= 0.25)
+              changedButtons.push(`${buttonIndex}:${value.toFixed(1)}`);
+            state.previousValues[buttonIndex] = value;
+          }
+          state.previousValues.length = pad.buttons.length;
+          if (changedButtons.length)
+            console.info(
+              `[Nyx gamepad] ${pad.id} mapping=${pad.mapping || "unmapped"} buttons=${changedButtons.join(",")}`,
+            );
+        }
+
+        if (resetBaseline) {
+          seedBaseline(pad, state, now);
+          continue;
+        }
+
+        for (let buttonIndex = 0; buttonIndex < pad.buttons.length; buttonIndex++) {
+          const pressed = pad.buttons[buttonIndex].pressed;
+          if (pressed && !state.buttons.has(buttonIndex)) {
+            state.buttons.add(buttonIndex);
+            const action = BUTTON_ACTIONS[buttonIndex];
+            if (action)
+              dispatchAction(pad, action, actionRef, vibrationRef, warnedVibration);
+          } else if (!pressed) {
+            state.buttons.delete(buttonIndex);
+          }
+        }
+
+        state.axisX = updateAxis(state.axisX, pad.axes[0] ?? 0);
+        state.axisY = updateAxis(state.axisY, pad.axes[1] ?? 0);
+        updateRepeat(pad, state, "left", state.buttons.has(14) || state.axisX < 0, now, actionRef, vibrationRef, warnedVibration);
+        updateRepeat(pad, state, "right", state.buttons.has(15) || state.axisX > 0, now, actionRef, vibrationRef, warnedVibration);
+        updateRepeat(pad, state, "up", state.buttons.has(12) || state.axisY < 0, now, actionRef, vibrationRef, warnedVibration);
+        updateRepeat(pad, state, "down", state.buttons.has(13) || state.axisY > 0, now, actionRef, vibrationRef, warnedVibration);
       }
+
+      for (const padIndex of states.keys()) {
+        if (pads[padIndex]) continue;
+        states.delete(padIndex);
+        warnedVibration.delete(padIndex);
+        warnedMapping.delete(padIndex);
+      }
+      if (anyConnected !== connectedValue) {
+        connectedValue = anyConnected;
+        setConnected(anyConnected);
+      }
+      resetBaseline = !enabledRef.current;
       frame = requestAnimationFrame(poll);
     };
+
     frame = requestAnimationFrame(poll);
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("gamepadconnected", onConnect);
-      window.removeEventListener("gamepaddisconnected", onDisconnect);
+      window.removeEventListener("focus", reset);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 

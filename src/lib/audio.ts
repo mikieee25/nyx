@@ -23,7 +23,10 @@ export function playCue(cue: Cue, enabled: boolean) {
       oscillator.type = "sine";
       oscillator.frequency.setValueAtTime(frequency, start);
       gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(cue === "launch" ? 0.045 : 0.025, start + 0.012);
+      gain.gain.linearRampToValueAtTime(
+        cue === "launch" ? 0.045 : 0.025,
+        start + 0.012,
+      );
       gain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
       oscillator.connect(gain).connect(context.destination);
       oscillator.start(start);

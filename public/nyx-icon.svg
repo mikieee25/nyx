@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="32" y1="24" x2="480" y2="492" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151c48"/><stop offset=".58" stop-color="#0c1026"/><stop offset="1" stop-color="#090a0f"/>
+    </linearGradient>
+    <radialGradient id="aurora" cx="0" cy="0" r="1" gradientTransform="matrix(440 0 0 390 30 10)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22d3ee" stop-opacity=".34"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="buttons" x1="112" y1="100" x2="402" y2="408" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67e8f9"/><stop offset=".52" stop-color="#22d3ee"/><stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="pad" x1="150" y1="138" x2="370" y2="380" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/><stop offset="1" stop-color="#a5f3fc"/>
+    </linearGradient>
+    <linearGradient id="sheen" x2="0" y2="1">
+      <stop stop-color="#fff" stop-opacity=".14"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-.3" y="-.3" width="1.6" height="1.6" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="16" result="blur"/><feColorMatrix in="blur" values="0 0 0 0 0.13 0 0 0 0 0.83 0 0 0 0 0.93 0 0 0 .42 0" result="cyanGlow"/><feMerge><feMergeNode in="cyanGlow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="120" fill="url(#aurora)"/>
+  <g filter="url(#glow)">
+    <g fill="url(#buttons)"><circle cx="158" cy="158" r="44"/><circle cx="354" cy="158" r="44"/><circle cx="158" cy="354" r="44"/><circle cx="354" cy="354" r="44"/></g>
+    <path fill="url(#pad)" d="M238 118h36a18 18 0 0 1 18 18v86h86a18 18 0 0 1 18 18v36a18 18 0 0 1-18 18h-86v86a18 18 0 0 1-18 18h-36a18 18 0 0 1-18-18v-86h-86a18 18 0 0 1-18-18v-36a18 18 0 0 1 18-18h86v-86a18 18 0 0 1 18-18Z"/>
+  </g>
+  <rect width="512" height="512" rx="120" fill="url(#sheen)"/>
+</svg>

@@ -3,6 +3,7 @@ export type GameFolder = {
   path: string;
   name: string;
   coverDataUrl: string | null;
+  iconDataUrl: string | null;
   executables: ExecutableCandidate[];
 };
 export type GamePreferences = {
@@ -10,6 +11,7 @@ export type GamePreferences = {
   favorites: string[];
   recent: string[];
   soundEnabled: boolean;
+  vibrationEnabled: boolean;
 };
 
 export const DEFAULT_PREFERENCES: GamePreferences = {
@@ -17,4 +19,5 @@ export const DEFAULT_PREFERENCES: GamePreferences = {
   favorites: [],
   recent: [],
   soundEnabled: true,
+  vibrationEnabled: true,
 };

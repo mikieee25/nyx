@@ -11,7 +11,7 @@ Turn `game_launcher.html` into Nyx, a Windows-only local game launcher packaged 
 - Launch only executables validated to be inside `D:\Games`.
 - Support mouse, keyboard, and connected gamepads. Gamepad navigation covers library browsing, focus, confirm, back, and launch.
 - Keep search, library filters, favorites, recent games, and local game details where they fit the current visual design.
-- Remove sample games and simulated download, friend, invite, account, and store behavior. Any online-themed visuals that remain are inert decoration; no network requests or accounts.
+- Remove sample games and simulated download, friend, invite, account, and store behavior. The only online feature is user-initiated SteamGridDB artwork search and download; game scanning, preferences, and launching remain local, with no account or sync layer.
 - Show clear scanning, empty-library, missing-drive, invalid-executable, and launch-error states.
 
 ## Design direction
@@ -32,26 +32,26 @@ Decorative online controls should be removed or repurposed for local information
 
 ## Architecture
 
-- **Frontend:** Next.js App Router using static export for Tauri's bundled web assets. Keep all runtime UI local; no server deployment or runtime network dependency.
+- **Frontend:** Next.js App Router using static export for Tauri's bundled web assets. No server deployment. The native Tauri layer makes HTTPS requests to SteamGridDB only when the user searches for or downloads artwork; the library and launcher continue working offline.
 - **UI:** HeroUI for accessible controls and dialogs, with a shared dark theme. GSAP owns only the presentation transitions; React owns application state.
 - **Desktop shell:** Tauri 2. Follow Helios's Windows NSIS installer and embedded WebView bootstrapper configuration. Do not copy Helios's download manager, updater, tray, or other unrelated plugins into Nyx.
-- **Native boundary:** Narrow Tauri commands handle library scanning, executable validation, and process launch. Canonicalize paths and reject any launch target outside `D:\Games`. The frontend never invokes arbitrary shell commands.
-- **Local state:** Store library mappings, favorites, and recent-play history on the device. No account or sync layer.
+- **Native boundary:** Narrow Tauri commands handle library scanning, executable validation, process launch, and SteamGridDB artwork requests. Canonicalize paths and reject any launch target outside `D:\Games`. Validate remote image hosts and size before caching. The frontend never invokes arbitrary shell commands.
+- **Local state:** Store library mappings, favorites, and recent-play history on the device. Store the user-provided SteamGridDB API key in Windows Credential Manager and selected artwork in Nyx's app-data cache. No account or sync layer.
 - **Assets and security:** Bundle CSS, fonts, scripts, icons, and fallbacks locally. Remove the current CDN dependencies (Tailwind CDN, Google Fonts, and Tone.js CDN) and use a restrictive production CSP compatible with Tauri IPC and local assets.
 
 ## Approaches considered
 
 1. **Wrap the current HTML directly.** Fastest prototype, but keeps the large imperative script and makes controller focus, local state, and accessible UI harder to maintain.
 2. **Rebuild the interface in Next.js, then bundle with Tauri (recommended).** Matches the selected stack and creates clear frontend/native boundaries; costs more initial conversion work.
-3. **Use a remote Next.js app inside Tauri.** Rejected because Nyx is local-only and should work without a network connection.
+3. **Use a remote Next.js app inside Tauri.** Rejected because Nyx's UI and game library must work offline; only the optional artwork lookup needs internet.
 
 ## Initial flow
 
-On startup, Nyx checks `D:\Games`, loads local library settings, and scans game folders. The library displays discovered folders using local artwork or a fallback. The user assigns an executable if needed, selects a game, and launches it. A rescan refreshes folders while preserving valid local settings. If the drive is unavailable, Nyx keeps the stored library visible where possible and explains that the library cannot currently be rescanned.
+On startup, Nyx checks `D:\Games`, loads local library settings, and scans game folders. The library displays discovered folders using local artwork, previously cached SteamGridDB artwork, or a bundled fallback. The user can search SteamGridDB, preview cover options, and cache one for a game; this requires the user's API key and an internet connection. The user assigns an executable if needed, selects a game, and launches it. A rescan refreshes folders while preserving valid local settings. If the drive is unavailable, Nyx keeps the stored library visible where possible and explains that the library cannot currently be rescanned.
 
 ## Completion evidence
 
-Before calling Nyx packaged, verify the static frontend build, Tauri Windows bundle, and installer launch on Windows. Manually check scanning against a sample library, rejection of executables outside `D:\Games`, launch failure feedback, gamepad navigation, sound mute/persistence, startup intro skip, and reduced-motion behavior. Do not claim production readiness without those checks.
+Before calling Nyx packaged, verify the static frontend build, Tauri Windows bundle, and installer launch on Windows. Manually check scanning against a sample library, rejection of executables outside `D:\Games`, launch failure feedback, gamepad navigation, sound mute/persistence, startup intro skip, reduced-motion behavior, SteamGridDB key persistence in Windows Credential Manager, artwork selection/cache, and cached artwork while offline. A live SteamGridDB check requires the user's own API key. Do not claim production readiness without those checks.
 
 ## Assumptions
 
