@@ -691,7 +691,7 @@ export default function LibraryScreen() {
   const introRef = useStartupAnimation(
     () => setIntro(false),
     reducedMotion,
-    intro,
+    intro && preferencesReady,
     !loading && preferencesReady,
   );
   const activeIndex = selected

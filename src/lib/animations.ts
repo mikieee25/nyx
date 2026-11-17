@@ -74,12 +74,13 @@ export function useStartupAnimation(
         )
         .fromTo(
           select(".intro-ring"),
-          { scale: 0.14, opacity: 0.8 },
+          { scale: 0.14, opacity: 0.8, svgOrigin: "256 256" },
           {
             scale: 1,
             opacity: 0,
             duration: 1,
             ease: easeOut,
+            svgOrigin: "256 256",
             immediateRender: false,
           },
           1.7,
