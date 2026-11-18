@@ -24,10 +24,16 @@ type PadState = {
   axisY: -1 | 0 | 1;
   repeat: Record<Direction, RepeatState>;
   previousValues: number[];
+  backPressedAt: number | null;
+  backCloseFired: boolean;
+  lastBackProgress: number;
 };
 type ActionRef = { current: (action: PadAction) => boolean | void };
 type BooleanRef = { current: boolean };
 type NoticeRef = { current: ((message: string) => void) | undefined };
+type BackHoldRef = { current: ((progress: number) => void) | undefined };
+const BACK_CLOSE_HOLD_MS = 2500;
+const BACK_CLOSE_INDICATOR_DELAY_MS = 600;
 
 const DIRECTIONS: Direction[] = ["left", "right", "up", "down"];
 const BUTTON_ACTIONS: Partial<Record<number, PadAction>> = {
@@ -55,7 +61,16 @@ function createPadState(): PadState {
   const repeat = {} as Record<Direction, RepeatState>;
   for (const direction of DIRECTIONS)
     repeat[direction] = { active: false, nextAt: 0 };
-  return { buttons: new Set(), axisX: 0, axisY: 0, repeat, previousValues: [] };
+  return {
+    buttons: new Set(),
+    axisX: 0,
+    axisY: 0,
+    repeat,
+    previousValues: [],
+    backPressedAt: null,
+    backCloseFired: false,
+    lastBackProgress: -1,
+  };
 }
 
 function readAxis(value: number): -1 | 0 | 1 {
@@ -134,6 +149,9 @@ function seedBaseline(pad: Gamepad, state: PadState, now: number) {
   state.previousValues.length = pad.buttons.length;
   state.axisX = readAxis(pad.axes[0] ?? 0);
   state.axisY = readAxis(pad.axes[1] ?? 0);
+  state.backPressedAt = null;
+  state.backCloseFired = false;
+  state.lastBackProgress = -1;
   const directions: Record<Direction, boolean> = {
     left: state.buttons.has(14) || state.axisX < 0,
     right: state.buttons.has(15) || state.axisX > 0,
@@ -151,11 +169,13 @@ export function useGamepad(
   vibrationEnabled = true,
   onNotice?: (message: string) => void,
   enabled = true,
+  onBackHoldProgress?: (progress: number) => void,
 ) {
   const actionRef = useRef(onAction);
   const vibrationRef = useRef(vibrationEnabled);
   const noticeRef = useRef(onNotice);
   const enabledRef = useRef(enabled);
+  const backHoldRef = useRef(onBackHoldProgress);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -163,7 +183,8 @@ export function useGamepad(
     vibrationRef.current = vibrationEnabled;
     noticeRef.current = onNotice;
     enabledRef.current = enabled;
-  }, [enabled, onAction, onNotice, vibrationEnabled]);
+    backHoldRef.current = onBackHoldProgress;
+  }, [enabled, onAction, onBackHoldProgress, onNotice, vibrationEnabled]);
 
   useEffect(() => {
     const states = new Map<number, PadState>();
@@ -204,6 +225,8 @@ export function useGamepad(
           states.set(pad.index, state);
         }
         if (!active) {
+          if (state.backPressedAt !== null || state.lastBackProgress >= 0)
+            backHoldRef.current?.(0);
           seedBaseline(pad, state, now);
           resetBaseline = true;
           continue;
@@ -240,6 +263,8 @@ export function useGamepad(
         }
 
         if (resetBaseline) {
+          if (state.backPressedAt !== null || state.lastBackProgress >= 0)
+            backHoldRef.current?.(0);
           seedBaseline(pad, state, now);
           continue;
         }
@@ -251,8 +276,42 @@ export function useGamepad(
             const action = BUTTON_ACTIONS[buttonIndex];
             if (action)
               dispatchAction(pad, action, actionRef, vibrationRef, warnedVibration);
+            if (buttonIndex === 1) {
+              state.backPressedAt = now;
+              state.backCloseFired = false;
+              state.lastBackProgress = -1;
+            }
           } else if (!pressed) {
+            if (buttonIndex === 1 && state.buttons.has(buttonIndex)) {
+              state.backPressedAt = null;
+              state.backCloseFired = false;
+              state.lastBackProgress = -1;
+              backHoldRef.current?.(0);
+            }
             state.buttons.delete(buttonIndex);
+          }
+        }
+
+        if (state.buttons.has(1) && state.backPressedAt !== null) {
+          const heldFor = now - state.backPressedAt;
+          if (heldFor >= BACK_CLOSE_INDICATOR_DELAY_MS) {
+            const progress = Math.min(
+              1,
+              (heldFor - BACK_CLOSE_INDICATOR_DELAY_MS) /
+                (BACK_CLOSE_HOLD_MS - BACK_CLOSE_INDICATOR_DELAY_MS),
+            );
+            const progressStep = Math.floor(progress * 50);
+            if (progressStep !== state.lastBackProgress) {
+              state.lastBackProgress = progressStep;
+              backHoldRef.current?.(progress);
+            }
+          }
+          if (heldFor >= BACK_CLOSE_HOLD_MS && !state.backCloseFired) {
+            state.backCloseFired = true;
+            if (state.lastBackProgress !== 50) {
+              state.lastBackProgress = 50;
+              backHoldRef.current?.(1);
+            }
           }
         }
 

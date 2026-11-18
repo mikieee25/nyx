@@ -104,6 +104,7 @@ export default function LibraryScreen() {
     current: string | null;
   }>({ previous: null, current: null });
   const [controllerMode, setControllerMode] = useState(false);
+  const [backHoldProgress, setBackHoldProgress] = useState(0);
   const [gameOpen, setGameOpen] = useState(false);
   const [exePickerOpen, setExePickerOpen] = useState(false);
   const [exeOptionIndex, setExeOptionIndex] = useState(0);
@@ -483,6 +484,29 @@ export default function LibraryScreen() {
     [artworkOpen],
   );
 
+  const controlWindow = useCallback(
+    async (action: "minimize" | "toggleMaximize" | "close") => {
+      if (!isTauri()) return;
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const appWindow = getCurrentWindow();
+        await appWindow[action]();
+      } catch (error) {
+        setNotice(
+          `Could not ${action === "toggleMaximize" ? "resize" : action} the Nyx window: ${String(error)}`,
+        );
+      }
+    },
+    [],
+  );
+  const handleBackHoldProgress = useCallback(
+    (progress: number) => {
+      setBackHoldProgress(progress);
+      if (progress >= 1) void controlWindow("close");
+    },
+    [controlWindow],
+  );
+
   const handleGamepadAction = useCallback(
     (action: PadAction) => {
       setControllerMode(true);
@@ -618,6 +642,7 @@ export default function LibraryScreen() {
     preferences.vibrationEnabled,
     setNotice,
     !gameOpen,
+    handleBackHoldProgress,
   );
 
   useEffect(() => {
@@ -697,21 +722,6 @@ export default function LibraryScreen() {
   const activeIndex = selected
     ? visibleGames.findIndex((game) => game.path === selected.path)
     : 0;
-  const controlWindow = useCallback(
-    async (action: "minimize" | "toggleMaximize" | "close") => {
-      if (!isTauri()) return;
-      try {
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        const appWindow = getCurrentWindow();
-        await appWindow[action]();
-      } catch (error) {
-        setNotice(
-          `Could not ${action === "toggleMaximize" ? "resize" : action} the Nyx window: ${String(error)}`,
-        );
-      }
-    },
-    [],
-  );
   const beginWindowDrag = useCallback((event: ReactMouseEvent<HTMLElement>) => {
     if (
       event.button !== 0 ||
@@ -818,6 +828,21 @@ export default function LibraryScreen() {
     <div
       className={`app-shell${intro ? "" : " is-ready"}${controllerMode ? " controller-mode" : ""}`}
     >
+      {backHoldProgress > 0 && (
+        <div className="gamepad-close-progress" role="status" aria-live="polite">
+          <span>Hold B / Circle to close Nyx</span>
+          <div
+            className="gamepad-close-progress-track"
+            role="progressbar"
+            aria-label="Close Nyx"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(backHoldProgress * 100)}
+          >
+            <i style={{ transform: `scaleX(${backHoldProgress})` }} />
+          </div>
+        </div>
+      )}
       <div className="ambient" aria-hidden="true" />
       <div className="game-backdrop" aria-hidden="true">
         {backdropImages.previous && (
