@@ -610,6 +610,27 @@ select:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.executable-path {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+  margin-top: 0.3rem;
+  color: var(--color-muted);
+  font-size: 0.68rem;
+}
+.executable-path span {
+  flex: 0 0 auto;
+  font-weight: 650;
+}
+.executable-path code {
+  min-width: 0;
+  overflow: hidden;
+  color: #c2ccda;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .game-actions {
   display: grid;
   grid-template-columns: auto auto auto;
@@ -766,30 +787,49 @@ select:focus-visible {
   display: grid;
   max-height: min(15rem, 45vh);
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 0.3rem;
   border: 1px solid var(--color-line);
   border-radius: 0.7rem;
   background: #141d2a;
   box-shadow: 0 14px 32px rgb(0 0 0 / 45%);
 }
+.select-executable-options::-webkit-scrollbar {
+  display: none;
+}
 .select-executable-option {
+  display: grid;
+  gap: 0.2rem;
   min-width: 0;
   padding: 0.55rem 0.65rem;
-  overflow: hidden;
   border: 0;
   border-radius: 0.45rem;
   color: var(--color-ink);
   background: transparent;
   font-size: 0.73rem;
   text-align: left;
+  cursor: pointer;
+}
+.select-executable-option-name {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
+}
+.select-executable-option-path {
+  color: var(--color-muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .select-executable-option:hover,
 .select-executable-option[aria-selected="true"] {
   color: #081216;
   background: var(--color-accent);
+}
+.select-executable-option:hover .select-executable-option-path,
+.select-executable-option[aria-selected="true"] .select-executable-option-path {
+  color: #16464a;
 }
 .select-executable-chevron {
   position: absolute;
@@ -945,11 +985,11 @@ select:focus-visible {
 .toast {
   position: fixed;
   z-index: 1000;
-  right: 1.5rem;
+  left: 50%;
   bottom: 4.5rem;
-  max-width: min(28rem, calc(100vw - 3rem));
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 2rem));
+  transform: translateX(-50%);
   overflow-wrap: anywhere;
   padding: 0.85rem 1rem;
   border: 1px solid var(--color-line);
@@ -958,6 +998,8 @@ select:focus-visible {
   background: var(--color-panel-raised);
   box-shadow: 0 16px 45px rgb(0 0 0 / 35%);
   font-size: 0.8rem;
+  line-height: 1.45;
+  text-align: center;
   animation: toast-enter var(--duration-slow) var(--ease-ui) both;
 }
 .gamepad-close-progress {
@@ -1279,11 +1321,11 @@ select:focus-visible {
 @keyframes toast-enter {
   from {
     opacity: 0;
-    transform: translateY(0.65rem);
+    transform: translate(-50%, 0.65rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
   }
 }
 @keyframes close-progress-enter {

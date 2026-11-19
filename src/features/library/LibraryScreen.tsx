@@ -34,6 +34,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
   DEFAULT_PREFERENCES,
@@ -94,6 +95,7 @@ export default function LibraryScreen() {
   const activeFilterPillRef = useRef<HTMLSpanElement>(null);
   const activeFilterPillReady = useRef(false);
   const [activePath, setActivePath] = useState("");
+  const lastCarouselWheelAt = useRef(0);
   const [filter, setFilter] = useState<Filter>("all");
   const deferredFilter = useDeferredValue(filter);
   const [query, setQuery] = useState("");
@@ -716,6 +718,22 @@ export default function LibraryScreen() {
         ["INPUT", "SELECT", "TEXTAREA"].includes(event.target.tagName)
       )
         return;
+      if (
+        event.key === "Enter" &&
+        !event.repeat &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        const target = event.target;
+        const button =
+          target instanceof HTMLElement ? target.closest("button") : null;
+        if (!button || button.matches(".carousel-card.is-active")) {
+          event.preventDefault();
+          void startGame();
+        }
+        return;
+      }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         moveSelection(-1);
@@ -739,7 +757,14 @@ export default function LibraryScreen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [artworkOpen, focusStep, intro, librarySettingsOpen, moveSelection]);
+  }, [
+    artworkOpen,
+    focusStep,
+    intro,
+    librarySettingsOpen,
+    moveSelection,
+    startGame,
+  ]);
 
   useEffect(() => {
     if (!notice) return;
@@ -1071,7 +1096,22 @@ export default function LibraryScreen() {
       </header>
 
       <main className="library-stage">
-        <section className="carousel-wrap" aria-label="Game carousel">
+        <section
+          className="carousel-wrap"
+          aria-label="Game carousel"
+          onWheel={(event: ReactWheelEvent<HTMLElement>) => {
+            const delta =
+              Math.abs(event.deltaX) > Math.abs(event.deltaY)
+                ? event.deltaX
+                : event.deltaY;
+            if (Math.abs(delta) < 8) return;
+            event.preventDefault();
+            const now = performance.now();
+            if (now - lastCarouselWheelAt.current < 220) return;
+            lastCarouselWheelAt.current = now;
+            moveSelection(delta > 0 ? 1 : -1);
+          }}
+        >
           {visibleGames.length ? (
             <>
               {visibleGames.map((game, index) => {
@@ -1197,9 +1237,12 @@ export default function LibraryScreen() {
               <h1 key={selected.path} className="game-title">
                 {selected.name}
               </h1>
-              <div className="game-subtitle" title={selected.path}>
-                {selected.path}
-              </div>
+              {selectedExe && (
+                <div className="executable-path" title={selectedExe.path}>
+                  <span>Selected .exe</span>
+                  <code>{selectedExe.path}</code>
+                </div>
+              )}
               <div className="game-actions">
                 <Button
                   className="play-button"
@@ -1304,7 +1347,12 @@ export default function LibraryScreen() {
                             onMouseEnter={() => setExeOptionIndex(index)}
                             onClick={() => chooseExecutable(exe.path)}
                           >
-                            {exe.name}
+                            <span className="select-executable-option-name">
+                              {exe.name}
+                            </span>
+                            <small className="select-executable-option-path">
+                              {exe.path}
+                            </small>
                           </button>
                         ))}
                       </div>
