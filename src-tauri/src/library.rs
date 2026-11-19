@@ -60,7 +60,7 @@ pub(crate) fn scan_games(
                     .first()
                     .and_then(|candidate| executable_icon(Path::new(&candidate.path))),
                 executables,
-                path: path.to_string_lossy().into_owned(),
+                path: display_path(&path),
             });
         }
     }
@@ -112,13 +112,21 @@ fn find_executables(game_root: &Path) -> Result<Vec<ExecutableCandidate>, String
             if kind.is_file() && is_exe(&entry.path()) {
                 candidates.push(ExecutableCandidate {
                     name: entry.file_name().to_string_lossy().into_owned(),
-                    path: entry.path().to_string_lossy().into_owned(),
+                    path: display_path(&entry.path()),
                 });
             }
         }
     }
     candidates.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(candidates)
+}
+
+fn display_path(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    if let Some(unc_path) = path.strip_prefix("\\\\?\\UNC\\") {
+        return format!("\\\\{unc_path}");
+    }
+    path.strip_prefix("\\\\?\\").unwrap_or(&path).to_string()
 }
 
 fn is_exe(path: &Path) -> bool {
