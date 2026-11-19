@@ -2,6 +2,7 @@
 
 import { Button } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
+import { open as openDirectory } from "@tauri-apps/plugin-dialog";
 import {
   AlertCircle,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
   Play,
   RefreshCw,
   Search,
+  Settings2,
   Square,
   Vibrate,
   VibrateOff,
@@ -23,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import gsap from "gsap";
+import { createPortal } from "react-dom";
 import {
   useCallback,
   useDeferredValue,
@@ -111,6 +114,7 @@ export default function LibraryScreen() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [artTint, setArtTint] = useState("rgba(42, 126, 150, .34)");
   const [artworkOpen, setArtworkOpen] = useState(false);
+  const [librarySettingsOpen, setLibrarySettingsOpen] = useState(false);
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [artworkQuery, setArtworkQuery] = useState("");
@@ -122,6 +126,7 @@ export default function LibraryScreen() {
   const [artworkBusy, setArtworkBusy] = useState(false);
   const [artworkError, setArtworkError] = useState("");
   const artworkDialog = useRef<HTMLDialogElement>(null);
+  const librarySettingsDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -235,7 +240,7 @@ export default function LibraryScreen() {
       }
       setPreferencesReady(true);
     }
-    const libraryResult = await scanGames().then(
+    const libraryResult = await scanGames(preferencesRef.current.libraryPaths).then(
       (value) => ({ ok: true as const, value }),
       (error) => ({ ok: false as const, error }),
     );
@@ -407,6 +412,13 @@ export default function LibraryScreen() {
     } else if (dialog?.open) dialog.close();
   }, [artworkOpen]);
 
+  useEffect(() => {
+    const dialog = librarySettingsDialog.current;
+    if (librarySettingsOpen) {
+      if (dialog && !dialog.open) dialog.showModal();
+    } else if (dialog?.open) dialog.close();
+  }, [librarySettingsOpen]);
+
   const moveSelection = useCallback(
     (delta: number) => {
       if (visibleGames.length <= 1) return false;
@@ -436,7 +448,7 @@ export default function LibraryScreen() {
     setNotice("");
     if (isTauri()) setGameOpen(true);
     playCue("launch", preferencesRef.current.soundEnabled);
-    void launchGame(chosenPath)
+    void launchGame(chosenPath, preferencesRef.current.libraryPaths)
       .then(() =>
         updatePreferences((old) => ({
           ...old,
@@ -541,6 +553,20 @@ export default function LibraryScreen() {
         }
         return false;
       }
+      if (librarySettingsOpen) {
+        if (action === "back") {
+          setLibrarySettingsOpen(false);
+          return true;
+        }
+        if (action === "confirm") {
+          const focused = document.activeElement;
+          if (focused instanceof HTMLElement && focused.matches("button")) {
+            focused.click();
+            return true;
+          }
+        }
+        return false;
+      }
       if (action === "options") {
         const executableSelect =
           document.querySelector<HTMLButtonElement>("#exe-select");
@@ -621,6 +647,7 @@ export default function LibraryScreen() {
     },
     [
       artworkOpen,
+      librarySettingsOpen,
       chooseExecutable,
       closeExePicker,
       exeOptionIndex,
@@ -654,6 +681,13 @@ export default function LibraryScreen() {
       if (intro && ["Enter", " ", "Escape"].includes(event.key)) {
         event.preventDefault();
         setIntro(false);
+        return;
+      }
+      if (librarySettingsOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setLibrarySettingsOpen(false);
+        }
         return;
       }
       if (artworkOpen) {
@@ -705,7 +739,7 @@ export default function LibraryScreen() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [artworkOpen, focusStep, intro, moveSelection]);
+  }, [artworkOpen, focusStep, intro, librarySettingsOpen, moveSelection]);
 
   useEffect(() => {
     if (!notice) return;
@@ -813,7 +847,12 @@ export default function LibraryScreen() {
     setArtworkBusy(true);
     setArtworkError("");
     try {
-      await downloadSteamGridDBArtwork(selected.path, sgdbGame.id, artwork.id);
+      await downloadSteamGridDBArtwork(
+        selected.path,
+        sgdbGame.id,
+        artwork.id,
+        preferencesRef.current.libraryPaths,
+      );
       setArtworkOpen(false);
       await readLibrary();
       setNotice(`Artwork saved for ${selected.name}.`);
@@ -913,8 +952,12 @@ export default function LibraryScreen() {
         <div className="topbar-heading">
           <div className="eyebrow">Your collection</div>
           <h2 className="section-title">Game library</h2>
-          <div className="library-path">
-            Library location&nbsp; <strong>D:\Games</strong>
+          <div className="library-path" title={preferences.libraryPaths.join("\n")}>
+            Library location&nbsp; <strong>{preferences.libraryPaths.length === 1
+              ? preferences.libraryPaths[0]
+              : preferences.libraryPaths.length
+                ? `${preferences.libraryPaths.length} folders`
+                : "None added"}</strong>
           </div>
         </div>
         <nav className="filters" ref={filtersRef} aria-label="Library filters">
@@ -999,6 +1042,14 @@ export default function LibraryScreen() {
             ) : (
               <VibrateOff className="ui-icon" aria-hidden="true" />
             )}
+          </button>
+          <button
+            className="icon-button"
+            title="Manage library folders"
+            aria-label="Manage library folders"
+            onClick={() => setLibrarySettingsOpen(true)}
+          >
+            <Settings2 className="ui-icon" aria-hidden="true" />
           </button>
           <button
             className={`scan-button${loading ? " is-scanning" : ""}`}
@@ -1300,7 +1351,7 @@ export default function LibraryScreen() {
               className={`status-dot ${!scanError && !loading ? "ready" : ""}`}
             />
             {loading
-              ? "Scanning D:\\Games"
+              ? "Scanning library folders"
               : scanError
                 ? "Drive unavailable"
                 : `${games.length} game folders`}
@@ -1315,11 +1366,13 @@ export default function LibraryScreen() {
         </div>
       </footer>
 
-      {notice && (
-        <div className="toast" role="status">
-          {notice}
-        </div>
-      )}
+      {notice && typeof document !== "undefined" &&
+        createPortal(
+          <div className="toast" role="status">
+            {notice}
+          </div>,
+          document.body,
+        )}
       <dialog
         ref={artworkDialog}
         className="artwork-dialog"
@@ -1468,6 +1521,75 @@ export default function LibraryScreen() {
               only when you search or download a cover.
             </p>
           )}
+        </div>
+      </dialog>
+      <dialog
+        ref={librarySettingsDialog}
+        className="artwork-dialog library-settings-dialog"
+        aria-labelledby="library-settings-title"
+        onCancel={(event) => {
+          event.preventDefault();
+          setLibrarySettingsOpen(false);
+        }}
+        onClose={() => setLibrarySettingsOpen(false)}
+      >
+        <div className="artwork-panel">
+          <header className="artwork-heading">
+            <div>
+              <div className="eyebrow">Library settings</div>
+              <h2 id="library-settings-title">Game folders</h2>
+            </div>
+            <button
+              className="icon-button"
+              aria-label="Close library settings"
+              onClick={() => setLibrarySettingsOpen(false)}
+            >
+              <X className="ui-icon" aria-hidden="true" />
+            </button>
+          </header>
+          <p className="artwork-offline-note">
+            Nyx scans each folder for game directories. Add or remove locations to match where your games are installed.
+          </p>
+          <div className="library-folder-list">
+            {!preferences.libraryPaths.length && (
+              <p className="artwork-offline-note">No folders added yet.</p>
+            )}
+            {preferences.libraryPaths.map((path) => (
+              <div className="library-folder-row" key={path}>
+                <span title={path}>{path}</span>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    const nextPaths = preferences.libraryPaths.filter((item) => item !== path);
+                    updatePreferences((old) => ({ ...old, libraryPaths: nextPaths }));
+                    void readLibrary();
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="play-button library-add-button"
+            onClick={async () => {
+              try {
+                const chosen = await openDirectory({ directory: true, multiple: false });
+                if (!chosen || Array.isArray(chosen)) return;
+                if (preferencesRef.current.libraryPaths.some((path) => path.toLowerCase() === chosen.toLowerCase())) {
+                  setNotice("That library folder is already added.");
+                  return;
+                }
+                const nextPaths = [...preferencesRef.current.libraryPaths, chosen];
+                updatePreferences((old) => ({ ...old, libraryPaths: nextPaths }));
+                await readLibrary();
+              } catch (error) {
+                setNotice(`Could not add library folder: ${String(error)}`);
+              }
+            }}
+          >
+            Add library folder
+          </button>
         </div>
       </dialog>
       {intro && (

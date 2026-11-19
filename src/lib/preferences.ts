@@ -29,6 +29,9 @@ export async function loadPreferences(): Promise<GamePreferences> {
     !Array.isArray(candidate.recent) ||
     candidate.recent.some((path) => typeof path !== "string") ||
     typeof candidate.soundEnabled !== "boolean" ||
+    (candidate.libraryPaths !== undefined &&
+      (!Array.isArray(candidate.libraryPaths) ||
+        candidate.libraryPaths.some((path) => typeof path !== "string"))) ||
     (candidate.vibrationEnabled !== undefined &&
       typeof candidate.vibrationEnabled !== "boolean")
   ) {
@@ -38,6 +41,7 @@ export async function loadPreferences(): Promise<GamePreferences> {
   }
   return {
     ...candidate,
+    libraryPaths: candidate.libraryPaths ?? [...DEFAULT_PREFERENCES.libraryPaths],
     vibrationEnabled: candidate.vibrationEnabled ?? true,
   } as GamePreferences;
 }

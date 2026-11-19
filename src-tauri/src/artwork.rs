@@ -220,15 +220,16 @@ pub(crate) async fn search_sgdb_artwork(game_id: u64) -> Result<Vec<GridArtwork>
     Ok(images)
 }
 
-fn validate_game_folder(game_path: &str) -> Result<PathBuf, String> {
-    let root = fs::canonicalize(r"D:\Games")
-        .map_err(|error| format!("Cannot access D:\\Games: {error}"))?;
+fn validate_game_folder(game_path: &str, library_roots: &[String]) -> Result<PathBuf, String> {
+    let roots = crate::library::canonical_library_roots(library_roots)?;
     let game =
         fs::canonicalize(game_path).map_err(|error| format!("Cannot find game folder: {error}"))?;
-    if game.parent() != Some(root.as_path()) || !game.is_dir() {
-        return Err(
-            "Artwork can only be saved for a game folder directly inside D:\\Games.".into(),
-        );
+    if !roots
+        .iter()
+        .any(|root| game.parent() == Some(root.as_path()))
+        || !game.is_dir()
+    {
+        return Err("Artwork can only be saved for a game folder directly inside a configured library location.".into());
     }
     Ok(game)
 }
@@ -263,8 +264,9 @@ pub(crate) async fn download_sgdb_artwork(
     game_path: String,
     game_id: u64,
     artwork_id: u64,
+    library_roots: Vec<String>,
 ) -> Result<(), String> {
-    let game = validate_game_folder(&game_path)?;
+    let game = validate_game_folder(&game_path, &library_roots)?;
     if game_id == 0 || artwork_id == 0 {
         return Err("Choose valid SteamGridDB artwork first.".into());
     }

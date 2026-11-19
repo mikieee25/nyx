@@ -8,7 +8,6 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 
-const LIBRARY_ROOT: &str = r"D:\Games";
 const MAX_COVER_BYTES: u64 = 8 * 1024 * 1024;
 const ART_NAMES: [&str; 5] = ["cover", "poster", "artwork", "banner", "folder"];
 const ART_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
@@ -31,36 +30,64 @@ pub(crate) struct GameFolder {
 }
 
 #[tauri::command]
-pub(crate) fn scan_games(app: AppHandle) -> Result<Vec<GameFolder>, String> {
-    let root = Path::new(LIBRARY_ROOT);
-    let entries =
-        fs::read_dir(root).map_err(|error| format!("Cannot read {LIBRARY_ROOT}: {error}"))?;
+pub(crate) fn scan_games(
+    app: AppHandle,
+    library_roots: Vec<String>,
+) -> Result<Vec<GameFolder>, String> {
+    let roots = canonical_library_roots(&library_roots)?;
     let mut folders = Vec::new();
 
-    for entry in entries {
-        let entry =
-            entry.map_err(|error| format!("Cannot inspect a folder in {LIBRARY_ROOT}: {error}"))?;
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("Cannot inspect {}: {error}", entry.path().display()))?;
-        if !file_type.is_dir() || file_type.is_symlink() {
-            continue;
+    for root in roots {
+        let entries = fs::read_dir(&root)
+            .map_err(|error| format!("Cannot read library folder {}: {error}", root.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                format!("Cannot inspect a folder in {}: {error}", root.display())
+            })?;
+            let file_type = entry
+                .file_type()
+                .map_err(|error| format!("Cannot inspect {}: {error}", entry.path().display()))?;
+            if !file_type.is_dir() || file_type.is_symlink() {
+                continue;
+            }
+            let path = entry.path();
+            let executables = find_executables(&path)?;
+            let cover_data_url = artwork::cached_cover(&app, &path)?.or_else(|| find_cover(&path));
+            folders.push(GameFolder {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                cover_data_url,
+                icon_data_url: executables
+                    .first()
+                    .and_then(|candidate| executable_icon(Path::new(&candidate.path))),
+                executables,
+                path: path.to_string_lossy().into_owned(),
+            });
         }
-        let path = entry.path();
-        let executables = find_executables(&path)?;
-        let cover_data_url = artwork::cached_cover(&app, &path)?.or_else(|| find_cover(&path));
-        folders.push(GameFolder {
-            name: entry.file_name().to_string_lossy().into_owned(),
-            cover_data_url,
-            icon_data_url: executables
-                .first()
-                .and_then(|candidate| executable_icon(Path::new(&candidate.path))),
-            executables,
-            path: path.to_string_lossy().into_owned(),
-        });
     }
     folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(folders)
+}
+
+pub(crate) fn canonical_library_roots(paths: &[String]) -> Result<Vec<PathBuf>, String> {
+    let mut roots = Vec::new();
+    for path in paths {
+        let root = fs::canonicalize(path)
+            .map_err(|error| format!("Cannot access library folder {path}: {error}"))?;
+        if !root.is_dir() {
+            return Err(format!(
+                "Library location is not a folder: {}",
+                root.display()
+            ));
+        }
+        if !roots.iter().any(|existing: &PathBuf| {
+            existing
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&root.to_string_lossy())
+        }) {
+            roots.push(root);
+        }
+    }
+    Ok(roots)
 }
 
 fn find_executables(game_root: &Path) -> Result<Vec<ExecutableCandidate>, String> {
@@ -247,13 +274,19 @@ fn executable_icon(_path: &Path) -> Option<String> {
 }
 
 #[tauri::command]
-pub(crate) fn launch_game(app: AppHandle, executable_path: String) -> Result<(), String> {
-    let root = fs::canonicalize(LIBRARY_ROOT)
-        .map_err(|error| format!("Cannot access {LIBRARY_ROOT}: {error}"))?;
+pub(crate) fn launch_game(
+    app: AppHandle,
+    executable_path: String,
+    library_roots: Vec<String>,
+) -> Result<(), String> {
+    let roots = canonical_library_roots(&library_roots)?;
     let executable = fs::canonicalize(&executable_path)
         .map_err(|error| format!("Cannot find the selected game executable: {error}"))?;
-    if !executable.starts_with(&root) || !executable.is_file() || !is_exe(&executable) {
-        return Err("The selected file is not an .exe inside D:\\Games.".into());
+    if !roots.iter().any(|root| executable.starts_with(root))
+        || !executable.is_file()
+        || !is_exe(&executable)
+    {
+        return Err("The selected executable is outside the configured library folders.".into());
     }
     let working_directory: PathBuf = executable
         .parent()

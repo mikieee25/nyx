@@ -19,6 +19,7 @@ pub(crate) fn show_main_window(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show-nyx", "Show Nyx", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit-nyx", "Quit Nyx", true, None::<&str>)?;

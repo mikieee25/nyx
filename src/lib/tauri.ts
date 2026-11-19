@@ -11,12 +11,12 @@ export type SteamGridDBArtwork = {
 
 export { isTauri };
 
-export function scanGames() {
-  return invoke<GameFolder[]>("scan_games");
+export function scanGames(libraryRoots: string[]) {
+  return invoke<GameFolder[]>("scan_games", { libraryRoots });
 }
 
-export function launchGame(executablePath: string) {
-  return invoke<void>("launch_game", { executablePath });
+export function launchGame(executablePath: string, libraryRoots: string[]) {
+  return invoke<void>("launch_game", { executablePath, libraryRoots });
 }
 
 export function hasSteamGridDBKey() {
@@ -43,6 +43,12 @@ export function downloadSteamGridDBArtwork(
   gamePath: string,
   gameId: number,
   artworkId: number,
+  libraryRoots: string[],
 ) {
-  return invoke<void>("download_sgdb_artwork", { gamePath, gameId, artworkId });
+  return invoke<void>("download_sgdb_artwork", {
+    gamePath,
+    gameId,
+    artworkId,
+    libraryRoots,
+  });
 }

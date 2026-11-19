@@ -21,6 +21,7 @@ tauri-plugin-store = "2"
 png = "0.18"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
+tauri-plugin-dialog = "2.8.4"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", default-features = false, features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

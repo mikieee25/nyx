@@ -7,6 +7,7 @@ export type GameFolder = {
   executables: ExecutableCandidate[];
 };
 export type GamePreferences = {
+  libraryPaths: string[];
   executableByGame: Record<string, string>;
   favorites: string[];
   recent: string[];
@@ -15,6 +16,7 @@ export type GamePreferences = {
 };
 
 export const DEFAULT_PREFERENCES: GamePreferences = {
+  libraryPaths: ["D:\\Games"],
   executableByGame: {},
   favorites: [],
   recent: [],
