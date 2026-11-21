@@ -52,6 +52,9 @@ pub(crate) fn scan_games(
             }
             let path = entry.path();
             let executables = find_executables(&path)?;
+            if executables.is_empty() {
+                continue;
+            }
             let cover_data_url = artwork::cached_cover(&app, &path)?.or_else(|| find_cover(&path));
             folders.push(GameFolder {
                 name: entry.file_name().to_string_lossy().into_owned(),

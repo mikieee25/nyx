@@ -982,7 +982,7 @@ select:focus-visible {
   transform-origin: left;
   background: linear-gradient(90deg, #22d3ee, #4f46e5);
 }
-.toast {
+.nyx-toast {
   position: fixed;
   z-index: 1000;
   left: 50%;

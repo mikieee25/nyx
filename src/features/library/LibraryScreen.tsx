@@ -1416,7 +1416,7 @@ export default function LibraryScreen() {
 
       {notice && typeof document !== "undefined" &&
         createPortal(
-          <div className="toast" role="status">
+          <div className="nyx-toast" role="status">
             {notice}
           </div>,
           document.body,
